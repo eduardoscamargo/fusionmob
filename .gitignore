@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# FusionMob project-specific
+!FusionMob/FusionMob.manifest
+.claude/settings.local.json
+# Stray test-import artifacts (real bundled model lives in resources/hardware/models/)
+FusionMob/433_03_132_3.obj
+FusionMob/433_03_132_3.mtl

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "default": "hafele_matrix_invisa_a30_300",
+  "slides": {
+    "hafele_matrix_invisa_a30_300": {
+      "description": "Corredica oculta Hafele Matrix Invisa A30 GT2 300mm (ext. total, push)",
+      "type": "undermount",
+      "nominal_length_mm": 300.0,
+      "carcass_deduction": 42.0,
+      "side_panel_thickness": 16.0,
+      "side_clearance": 6.0,
+      "bottom_clearance": 13.0,
+      "back_clearance": 18.0,
+      "min_cabinet_depth": 318.0,
+      "recommended_box_depth": 300.0,
+      "base_depth_offset": 29.0,
+      "proxy_L": 300.0,
+      "proxy_W": 12.0,
+      "proxy_H": 45.0,
+      "drilling": [],
+      "model_file": "models/433_03_132_4.stp",
+      "model_transform": {
+        "tx": 0.0, "ty": 0.0, "tz": 0.0,
+        "rot_deg": 90.0, "rot_axis": [0.0, 0.0, 1.0], "scale": 1.0
+      }
+    }
+  }
+}
