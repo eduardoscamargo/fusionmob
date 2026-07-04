@@ -25,7 +25,7 @@ import math
 
 # Add-in version (keep in sync with FusionMob.manifest). Bump the patch digit
 # (last number) on every modification — see CLAUDE.md "Versioning".
-__version__ = '1.2.2'
+__version__ = '1.4.0'
 
 app = None
 ui = None
@@ -34,6 +34,9 @@ handlers = []
 # The right-clicked cabinet's entity token, set by the marking-menu handler so
 # the Edit Cabinet dialog can pre-select it. Cleared once consumed.
 _context_edit_token = None
+# The right-clicked tagged panel body's entity token, so the Edit Panel dialog
+# can pre-select it. Cleared once consumed.
+_context_panel_token = None
 # Reference to the marking-menu handler so stop() can unregister it.
 _marking_menu_handler = None
 
@@ -43,6 +46,7 @@ TAB_NAME = 'FusionMob'
 PANEL_ID = 'FusionMobPanel'
 
 NEW_PANEL_CMD_ID = 'FusionMobNewPanel'
+EDIT_PANEL_CMD_ID = 'FusionMobEditPanel'
 NEW_CABINET_CMD_ID = 'FusionMobNewCabinet'
 EDIT_CABINET_CMD_ID = 'FusionMobEditCabinet'
 LAYOUT_CMD_ID = 'FusionMobCabinetLayout'
@@ -200,6 +204,65 @@ DEFAULT_TOL = {
     'shelf_door_clearance': 2.0,    # gap from a closed door's inner face to the shelf front
 }
 
+# Edge banding (fita) defaults. CorteCloud's CSV has four Fita columns (C1/C2 on
+# the Comprimento edges, L1/L2 on the Largura edges); a panel is banded only on
+# its VISIBLE edges, and the tape comes in two thicknesses. 'name_thin' (0.4mm)
+# and 'name_thick' (1mm) are free-text tape names (colour follows the operator);
+# 'carcass' picks the thickness for the front edge of sides/base/top/shelves/
+# dividers, 'fronts' the thickness for doors/drawer faces (all four edges) and
+# the toe-kick front board. Each is 'none' | 'thin' | 'thick'. Deep-merged in
+# normalize_cfg like HINGE/DRAWER/DEFAULT_TOL, so switching a group's thickness
+# (or turning it off) re-bands the whole cut list on the next build.
+FITA = {
+    'name_thin':  'Fita PVC 0.4mm Branco',   # the 0.4mm tape
+    'name_thick': 'Fita PVC 1mm Branco',     # the 1mm tape
+    'carcass': 'thin',    # sides/base/top/shelves/dividers front edge
+    'fronts':  'thick',   # doors + drawer faces (all 4) + toe-kick front
+}
+
+
+def fita_tape(fita_cfg, group):
+    """Resolve a fita group ('carcass'/'fronts') to its tape name, or '' when the
+    group is off ('none'). Pure — no adsk dependency, unit-testable."""
+    choice = (fita_cfg or {}).get(group, 'none')
+    if choice == 'thin':
+        return fita_cfg.get('name_thin', FITA['name_thin'])
+    if choice == 'thick':
+        return fita_cfg.get('name_thick', FITA['name_thick'])
+    return ''
+
+
+# Dropdown labels for a fita thickness choice, in order. Value <-> label helpers.
+FITA_CHOICES = [('none', 'Nenhuma'), ('thin', '0.4mm (fina)'), ('thick', '1mm (grossa)')]
+
+
+def _fita_choice_label(value):
+    for v, lbl in FITA_CHOICES:
+        if v == value:
+            return lbl
+    return FITA_CHOICES[0][1]
+
+
+def _fita_choice_value(label):
+    for v, lbl in FITA_CHOICES:
+        if lbl == label:
+            return v
+    return 'none'
+
+
+def _fita_value_for(name, thin_name, thick_name):
+    """Classify a stored tape name into a choice ('none'/'thin'/'thick') given the
+    two configured tape names. An unknown non-empty tape counts as present, so it
+    maps to 'thick' rather than being silently dropped."""
+    if not name:
+        return 'none'
+    if name == thin_name:
+        return 'thin'
+    if name == thick_name:
+        return 'thick'
+    return 'thick'
+
+
 # Default cabinet configuration (mm). The New Cabinet dialog opens with these;
 # Edit Cabinet loads the stored config of the chosen cabinet instead.
 #
@@ -247,6 +310,11 @@ DEFAULT_CFG = {
     'slide_key': 'hafele_matrix_invisa_a30_300', 'insert_real_hardware': False,
     'drawer': dict(DRAWER),
     'tol': dict(DEFAULT_TOL),
+    # Edge banding (fita). Auto-bands the visible front edge of carcass parts and
+    # all four edges of doors/faces; see FITA / fita_tape. Deep-merged in
+    # normalize_cfg. The legacy 'door_band'/'drawer.face_band' keys are ignored on
+    # build now that fronts source their tape from this block.
+    'fita': dict(FITA),
     # Interior LAYOUT. None is a sentinel meaning "derive a single-region layout
     # from the flat fields above" (see normalize_cfg / _synthesize_layout_from_flat)
     # so old stored cabinets and the classic New/Edit dialog keep working. The
@@ -485,21 +553,39 @@ def add_solid_panel(cabinet_comp, name, box, data, grooves=None, holes=None):
     return occ
 
 
-def make_panel_data(funcao, complemento, dim_a_mm, dim_b_mm, material, girar='Sim', band=None):
+def make_panel_data(funcao, complemento, dim_a_mm, dim_b_mm, material, girar='Sim',
+                    band=None, bands=None):
     """Build a CorteCloud cut-list record for one carcass panel.
 
-    Comprimento is the larger face dimension, Largura the smaller. When `band`
-    (a tape name) is given, all four edges are banded with it — the usual case
-    for doors, which are taped all around."""
+    Comprimento is the larger face dimension, Largura the smaller; C1/C2 tape the
+    two Comprimento edges, L1/L2 the two Largura edges.
+
+    Edge banding, in priority order:
+      * `band` (a tape name) — all four edges (the usual case for doors/faces).
+      * `bands` — per-edge, expressed relative to the two dims the caller passes:
+        {'a': (t, t), 'b': (t, t)} where 'a' is the pair of edges of length
+        dim_a and 'b' the pair of length dim_b. They map to C1/C2/L1/L2 by the
+        same larger->Comprimento rule, so a single front edge (e.g.
+        bands={'a': (tape, '')}) always lands in the right column regardless of
+        which dim is larger.
+      * neither — all edges blank."""
     comp_mm = max(dim_a_mm, dim_b_mm)
     larg_mm = min(dim_a_mm, dim_b_mm)
-    fita = band or ''
+    if band is not None:
+        c1 = c2 = l1 = l2 = band or ''
+    elif bands:
+        a = tuple(bands.get('a', ('', '')))
+        b = tuple(bands.get('b', ('', '')))
+        # The dim_a pair are the Comprimento edges when dim_a is the larger.
+        (c1, c2), (l1, l2) = (a, b) if dim_a_mm >= dim_b_mm else (b, a)
+    else:
+        c1 = c2 = l1 = l2 = ''
     return {
         'quantidade': 1,
         'comprimento_mm': round(comp_mm, 1),
         'largura_mm': round(larg_mm, 1),
         'funcao': funcao,
-        'fita_C1': fita, 'fita_C2': fita, 'fita_L1': fita, 'fita_L2': fita,
+        'fita_C1': c1, 'fita_C2': c2, 'fita_L1': l1, 'fita_L2': l2,
         'material': material,
         'complemento': complemento,
         'girar': girar,
@@ -1168,7 +1254,8 @@ def build_shelves(band, node, ctx, prefix, min_front_setback=0.0):
         name = _pname(ctx, prefix, 'Prateleira', ctx.shelf_i)
         ctx.add_panel(name,
                       (band.x0, front_setback / 10.0, z0, width_c, shelf_depth / 10.0, ctx.tc),
-                      make_panel_data('Prateleira', name, width_c * 10.0, shelf_depth, ctx.material))
+                      make_panel_data('Prateleira', name, width_c * 10.0, shelf_depth, ctx.material,
+                                      bands={'a': (ctx.fita_carcass, '')}))
 
 
 def build_doors(band, node, ctx, prefix):
@@ -1247,7 +1334,7 @@ def build_doors(band, node, ctx, prefix):
         ctx.door_i += 1
         name = _pname(ctx, prefix, 'Porta', ctx.door_i, single_ok=(ctx.single_leaf and n == 1))
         data = make_panel_data('Porta', name, door_h_mm, door_w_mm,
-                               ctx.door_material, girar='Nao', band=ctx.door_band)
+                               ctx.door_material, girar='Nao', band=ctx.fita_front)
         door_center = x0 + door_w_c / 2.0
         if door_center <= band_mid:
             hinge_x_c, hinge_side = x0, 'left'
@@ -1384,7 +1471,7 @@ def build_drawers(band, node, ctx, prefix):
             make_panel_data('Fundo', label + ' Fundo', bot_w_mm, bot_d_mm, drawer['bottom_material']))
 
         face_data = make_panel_data('Porta', label + ' Frente', face_h_mm, face_w_mm,
-                                    drawer['face_material'], girar='Nao', band=drawer['face_band'])
+                                    drawer['face_material'], girar='Nao', band=ctx.fita_front)
         face_data['complemento'] = '{0} Frente (corredica {1}, par {2:.0f}mm)'.format(
             label, spec['description'], spec['nominal_length_mm'])
         add_solid_body(dcomp, label + ' Frente',
@@ -1431,11 +1518,17 @@ def build_cabinet(design, cfg, translation=None):
     toe_kick_max_span = cfg['toe_kick_max_span']
     with_doors, door_material = cfg['with_doors'], cfg['door_material']
     door_t, n_doors = cfg['door_t'], cfg['n_doors']
-    door_gap, door_band = cfg['door_gap'], cfg['door_band']
+    door_gap = cfg['door_gap']
     door_inset = cfg['door_inset']
     with_hinges = with_doors and cfg['with_hinges']
     hinge = cfg.get('hinge', HINGE)
     tol = cfg['tol']
+    # Edge banding tapes for this build (see FITA / fita_tape). '' when a group
+    # is off. 'carcass' bands the front edge of sides/base/top/shelves/dividers;
+    # 'fronts' bands doors/faces (all four) and the toe-kick front board.
+    fita_cfg = cfg['fita']
+    fita_carcass = fita_tape(fita_cfg, 'carcass')
+    fita_front = fita_tape(fita_cfg, 'fronts')
 
     # The carcass rests on a separate toe-kick base, so the box height is the
     # overall height minus the kick, and every carcass panel is lifted by the
@@ -1518,9 +1611,11 @@ def build_cabinet(design, cfg, translation=None):
     # created later (after the interior walk) because door hinge plates bore into
     # them and those hole positions are only known once the regions are laid out.
     add_panel('Base', (tc, 0.0, z_off, Wc - 2 * tc, Dc, tc),
-              make_panel_data('Base', 'Base', inner_w, D, material), base_g)
+              make_panel_data('Base', 'Base', inner_w, D, material,
+                              bands={'a': (fita_carcass, '')}), base_g)
     add_panel('Tampo', (tc, 0.0, z_off + Hbox_c - tc, Wc - 2 * tc, Dc, tc),
-              make_panel_data('Tampo', 'Tampo', inner_w, D, material), top_g)
+              make_panel_data('Tampo', 'Tampo', inner_w, D, material,
+                              bands={'a': (fita_carcass, '')}), top_g)
 
     # Back panel: reaches 'engage' (= dd - bottom clearance) into all four grooves.
     if with_back:
@@ -1560,7 +1655,8 @@ def build_cabinet(design, cfg, translation=None):
 
         # Front (visible) board + back rail, both spanning the full width.
         add_kick('Rodape Frente', (0.0, s_c, 0.0, Wc, kt_c, kh_c),
-                 make_panel_data('Rodape', 'Rodape Frente', W, toe_kick_height, toe_kick_material))
+                 make_panel_data('Rodape', 'Rodape Frente', W, toe_kick_height, toe_kick_material,
+                                 bands={'a': (fita_front, '')}))
         add_kick('Rodape Traseira', (0.0, conn_y1, 0.0, Wc, kt_c, kh_c),
                  make_panel_data('Travessa', 'Rodape Traseira', W, toe_kick_height, toe_kick_material))
 
@@ -1595,7 +1691,8 @@ def build_cabinet(design, cfg, translation=None):
     ctx.add_panel = add_panel
     ctx.material = material
     ctx.door_material = door_material
-    ctx.door_band = door_band
+    ctx.fita_carcass = fita_carcass
+    ctx.fita_front = fita_front
     ctx.door_gap = door_gap
     ctx.door_t = door_t
     ctx.drawer_gap = cfg['drawer_gap']
@@ -1637,16 +1734,19 @@ def build_cabinet(design, cfg, translation=None):
         holes = ctx.hole_map.get(d['key']) if d['key'] is not None else None
         a_mm, b_mm = d['data_dims']
         add_panel(d['name'], d['box'],
-                  make_panel_data(d['funcao'], d['name'], a_mm, b_mm, material),
+                  make_panel_data(d['funcao'], d['name'], a_mm, b_mm, material,
+                                  bands={'a': (fita_carcass, '')}),
                   None, holes)
 
     # Sides LAST: full box height x depth, thickness along X, with the back
     # grooves and any accumulated hinge plate holes. (anchor stays the Corpo occ.)
     add_panel('Lateral Esquerda', (0.0, 0.0, z_off, tc, Dc, Hbox_c),
-              make_panel_data('Lateral', 'Lateral Esquerda', Hbox, D, material),
+              make_panel_data('Lateral', 'Lateral Esquerda', Hbox, D, material,
+                              bands={'a': (fita_carcass, '')}),
               left_g, ctx.hole_map.get('L'))
     add_panel('Lateral Direita', (Wc - tc, 0.0, z_off, tc, Dc, Hbox_c),
-              make_panel_data('Lateral', 'Lateral Direita', Hbox, D, material),
+              make_panel_data('Lateral', 'Lateral Direita', Hbox, D, material,
+                              bands={'a': (fita_carcass, '')}),
               right_g, ctx.hole_map.get('R'))
 
     door_occs = ctx.door_occs
@@ -1785,7 +1885,7 @@ def _normalize_layout_node(node):
 def normalize_cfg(cfg):
     """Fill any missing keys from the defaults (robust to older stored configs)."""
     out = dict(DEFAULT_CFG)
-    out.update({k: cfg[k] for k in cfg if k not in ('tol', 'hinge', 'drawer', 'layout')})
+    out.update({k: cfg[k] for k in cfg if k not in ('tol', 'hinge', 'drawer', 'fita', 'layout')})
     tol = dict(DEFAULT_TOL)
     if isinstance(cfg.get('tol'), dict):
         tol.update(cfg['tol'])
@@ -1798,6 +1898,10 @@ def normalize_cfg(cfg):
     if isinstance(cfg.get('drawer'), dict):
         drawer.update(cfg['drawer'])
     out['drawer'] = drawer
+    fita = dict(FITA)
+    if isinstance(cfg.get('fita'), dict):
+        fita.update(cfg['fita'])
+    out['fita'] = fita
     # Layout: synthesize a single region from the flat fields when absent (old
     # configs / classic dialog); otherwise deep-fill the explicit tree.
     lay = cfg.get('layout')
@@ -1874,7 +1978,6 @@ def add_cabinet_inputs(inputs, cfg):
     dr.addIntegerSpinnerCommandInput('nDoors', 'Numero de portas', 1, 20, 1, int(cfg['n_doors']))
     dr.addBoolValueInput('doorInset', 'Porta embutida (inset)', True, '', bool(cfg['door_inset']))
     dr.addValueInput('doorGap', 'Folga (reveal)', 'mm', adsk.core.ValueInput.createByReal(cfg['door_gap'] / 10.0))
-    dr.addStringValueInput('doorBand', 'Fita da porta', cfg['door_band'])
     dr.addBoolValueInput('withHinges', 'Furacao de dobradica (cup 35mm)', True, '', bool(cfg['with_hinges']))
 
     dw_group = inputs.addGroupCommandInput('drawerGroup', 'Gavetas (drawers)')
@@ -1903,7 +2006,6 @@ def add_cabinet_inputs(inputs, cfg):
         face_mat.listItems.add(name, name == dr_cfg['face_material'])
     if not face_mat.selectedItem:
         face_mat.listItems.item(0).isSelected = True
-    dw.addStringValueInput('drawerFaceBand', 'Fita da frente', dr_cfg['face_band'])
     dw.addBoolValueInput('insertRealHardware', 'Inserir modelo 3D da corredica',
                          True, '', bool(cfg['insert_real_hardware']))
 
@@ -1935,6 +2037,23 @@ def add_cabinet_inputs(inputs, cfg):
                     adsk.core.ValueInput.createByReal(hinge['end_inset'] / 10.0))
     a.addValueInput('hingeShelfClear', 'Dobradica: folga da prateleira', 'mm',
                     adsk.core.ValueInput.createByReal(hinge['shelf_clearance'] / 10.0))
+
+    # Edge banding (fita). Two editable tape names (0.4mm / 1mm) plus which
+    # thickness each part group uses: 'carcass' = the visible front edge of
+    # sides/base/top/shelves/dividers; 'fronts' = doors + drawer faces (all four
+    # edges) + the toe-kick front board.
+    fita = cfg['fita']
+    a.addStringValueInput('fitaThin', 'Fita 0.4mm (nome)', fita['name_thin'])
+    a.addStringValueInput('fitaThick', 'Fita 1mm (nome)', fita['name_thick'])
+    fc = a.addDropDownCommandInput(
+        'fitaCarcass', 'Fita bordas do corpo', adsk.core.DropDownStyles.TextListDropDownStyle)
+    for (_v, lbl) in FITA_CHOICES:
+        fc.listItems.add(lbl, lbl == _fita_choice_label(fita['carcass']))
+    ff = a.addDropDownCommandInput(
+        'fitaFronts', 'Fita frentes (portas/gavetas/rodape)',
+        adsk.core.DropDownStyles.TextListDropDownStyle)
+    for (_v, lbl) in FITA_CHOICES:
+        ff.listItems.add(lbl, lbl == _fita_choice_label(fita['fronts']))
 
 
 def read_cabinet_inputs(inputs):
@@ -1974,7 +2093,6 @@ def read_cabinet_inputs(inputs):
         'n_doors': inputs.itemById('nDoors').value,
         'door_inset': inputs.itemById('doorInset').value,
         'door_gap': inputs.itemById('doorGap').value * 10.0,
-        'door_band': inputs.itemById('doorBand').value,
         'with_hinges': inputs.itemById('withHinges').value,
         'hinge': hinge,
         'with_drawers': inputs.itemById('withDrawers').value,
@@ -1984,11 +2102,11 @@ def read_cabinet_inputs(inputs):
         'slide_key': _slide_key_from_label(inputs.itemById('slideKey').selectedItem.name),
         'insert_real_hardware': inputs.itemById('insertRealHardware').value,
         # Start from the DRAWER defaults so the un-exposed box/bottom specs are
-        # kept, then override the materials + band shown in the dialog.
+        # kept, then override the materials shown in the dialog. (The drawer face
+        # band now comes from the shared 'fita' block, not a per-drawer field.)
         'drawer': dict(DRAWER, **{
             'box_material': inputs.itemById('drawerBoxMaterial').selectedItem.name,
             'face_material': inputs.itemById('drawerFaceMaterial').selectedItem.name,
-            'face_band': inputs.itemById('drawerFaceBand').value,
         }),
         'tol': {
             'dado_bottom_clearance': inputs.itemById('tolDadoBottom').value * 10.0,
@@ -1996,6 +2114,12 @@ def read_cabinet_inputs(inputs):
             'shelf_back_gap': inputs.itemById('tolShelfBack').value * 10.0,
             'shelf_front_setback': inputs.itemById('tolShelfFront').value * 10.0,
             'shelf_door_clearance': inputs.itemById('tolShelfDoor').value * 10.0,
+        },
+        'fita': {
+            'name_thin': inputs.itemById('fitaThin').value,
+            'name_thick': inputs.itemById('fitaThick').value,
+            'carcass': _fita_choice_value(inputs.itemById('fitaCarcass').selectedItem.name),
+            'fronts': _fita_choice_value(inputs.itemById('fitaFronts').selectedItem.name),
         },
     }
 
@@ -2026,7 +2150,6 @@ def write_cabinet_inputs(inputs, cfg):
     inputs.itemById('nDoors').value = int(cfg['n_doors'])
     inputs.itemById('doorInset').value = bool(cfg['door_inset'])
     inputs.itemById('doorGap').value = cfg['door_gap'] / 10.0
-    inputs.itemById('doorBand').value = cfg['door_band']
     inputs.itemById('withHinges').value = bool(cfg['with_hinges'])
     inputs.itemById('withDrawers').value = bool(cfg['with_drawers'])
     _select_dropdown(inputs.itemById('slideKey'), _slide_label_for_key(cfg['slide_key']))
@@ -2036,7 +2159,6 @@ def write_cabinet_inputs(inputs, cfg):
     dr_cfg = cfg['drawer']
     _select_dropdown(inputs.itemById('drawerBoxMaterial'), dr_cfg['box_material'])
     _select_dropdown(inputs.itemById('drawerFaceMaterial'), dr_cfg['face_material'])
-    inputs.itemById('drawerFaceBand').value = dr_cfg['face_band']
     inputs.itemById('insertRealHardware').value = bool(cfg['insert_real_hardware'])
     tol = cfg['tol']
     inputs.itemById('tolDadoBottom').value = tol['dado_bottom_clearance'] / 10.0
@@ -2050,6 +2172,11 @@ def write_cabinet_inputs(inputs, cfg):
     inputs.itemById('hingeCupEdge').value = hinge['cup_edge'] / 10.0
     inputs.itemById('hingeEndInset').value = hinge['end_inset'] / 10.0
     inputs.itemById('hingeShelfClear').value = hinge['shelf_clearance'] / 10.0
+    fita = cfg['fita']
+    inputs.itemById('fitaThin').value = fita['name_thin']
+    inputs.itemById('fitaThick').value = fita['name_thick']
+    _select_dropdown(inputs.itemById('fitaCarcass'), _fita_choice_label(fita['carcass']))
+    _select_dropdown(inputs.itemById('fitaFronts'), _fita_choice_label(fita['fronts']))
 
 
 def validate_cfg(cfg):
@@ -2455,11 +2582,211 @@ def _find_cabinet_occ(args):
         return None
 
 
+# -----------------------------------------------------------------------------
+# Edit Panel command — edit one body's edge banding (fita) in place.
+#
+# Fita is pure cut-list metadata (not modelled geometry), so editing a panel's
+# banding is just a rewrite of its panelData attribute — no rebuild. Select one
+# or more tagged bodies, set the four edges (Nenhuma / 0.4mm / 1mm), and the
+# chosen tape name is written to fita_C1..L2. Available on the ribbon and from
+# the right-click menu when a tagged body is selected.
+# -----------------------------------------------------------------------------
+def _panel_body_from_entity(ent):
+    """Return `ent` if it is a BRep body carrying our panelData attribute, else
+    None. Guarded so a right-click can never raise."""
+    try:
+        if not isinstance(ent, adsk.fusion.BRepBody):
+            return None
+        attr = ent.attributes.itemByName(ATTR_GROUP, ATTR_NAME)
+        if attr and attr.value:
+            return ent
+    except:
+        pass
+    return None
+
+
+def _panel_body_from_collection(coll):
+    """First tagged panel body in a Fusion collection (marking-menu entities or
+    activeSelections wrappers), or None."""
+    if not coll:
+        return None
+    try:
+        n = coll.count
+    except:
+        return None
+    for i in range(n):
+        try:
+            item = coll.item(i)
+        except:
+            continue
+        ent = getattr(item, 'entity', item)  # unwrap Selection -> entity
+        body = _panel_body_from_entity(ent)
+        if body:
+            return body
+    return None
+
+
+def _read_panel_data(body):
+    """The body's panelData dict, or None if absent/unparseable."""
+    try:
+        attr = body.attributes.itemByName(ATTR_GROUP, ATTR_NAME)
+        if attr and attr.value:
+            return json.loads(attr.value)
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
+def _load_fita_dropdowns(inputs, body):
+    """Seed the four edge dropdowns from a body's stored fita, classified against
+    the tape-name fields currently in the dialog."""
+    data = _read_panel_data(body) if body else None
+    thin = inputs.itemById('epFitaThin').value
+    thick = inputs.itemById('epFitaThick').value
+    info = ''
+    if data:
+        info = '{0}  |  {1}  ({2:.0f} x {3:.0f} mm)'.format(
+            data.get('complemento', ''), data.get('funcao', ''),
+            data.get('comprimento_mm', 0), data.get('largura_mm', 0))
+    for edge, key in (('epC1', 'fita_C1'), ('epC2', 'fita_C2'),
+                      ('epL1', 'fita_L1'), ('epL2', 'fita_L2')):
+        val = _fita_value_for(data.get(key, '') if data else '', thin, thick)
+        _select_dropdown(inputs.itemById(edge), _fita_choice_label(val))
+    inputs.itemById('epInfo').text = info or 'Selecione um painel FusionMob.'
+
+
+class EditPanelCreatedHandler(adsk.core.CommandCreatedEventHandler):
+    def notify(self, args):
+        global _context_panel_token
+        try:
+            design = get_design()
+            if not design:
+                ui.messageBox('Open a Design document first.')
+                return
+            inputs = args.command.commandInputs
+
+            sel = inputs.addSelectionInput('panelSel', 'Painel (body)',
+                                           'Selecione um ou mais paineis FusionMob')
+            sel.addSelectionFilter('SolidBodies')
+            sel.setSelectionLimits(1, 0)
+
+            inputs.addTextBoxCommandInput('epInfo', '', 'Selecione um painel FusionMob.', 2, True)
+
+            # Tape names (default to the FITA defaults; the operator can override
+            # the exact tape written).
+            inputs.addStringValueInput('epFitaThin', 'Fita 0.4mm (nome)', FITA['name_thin'])
+            inputs.addStringValueInput('epFitaThick', 'Fita 1mm (nome)', FITA['name_thick'])
+
+            grp = inputs.addGroupCommandInput('epEdges', 'Fita por borda')
+            grp.isExpanded = True
+            g = grp.children
+            for edge, label in (('epC1', 'Fita C1 (comprimento)'),
+                                ('epC2', 'Fita C2 (comprimento)'),
+                                ('epL1', 'Fita L1 (largura)'),
+                                ('epL2', 'Fita L2 (largura)')):
+                dd = g.addDropDownCommandInput(edge, label,
+                                               adsk.core.DropDownStyles.TextListDropDownStyle)
+                for (_v, lbl) in FITA_CHOICES:
+                    dd.listItems.add(lbl, _v == 'none')
+
+            # Pre-select the right-clicked body, if any.
+            preset = None
+            if _context_panel_token:
+                try:
+                    ents = design.findEntityByToken(_context_panel_token)
+                    for e in (ents or []):
+                        if _panel_body_from_entity(e):
+                            preset = e
+                            break
+                except:
+                    preset = None
+                _context_panel_token = None
+            if preset is None:
+                preset = _panel_body_from_collection(ui.activeSelections)
+            if preset is not None:
+                try:
+                    sel.addSelection(preset)
+                except:
+                    pass
+            _load_fita_dropdowns(inputs, preset)
+
+            onChange = EditPanelInputChangedHandler()
+            args.command.inputChanged.add(onChange)
+            handlers.append(onChange)
+            onExec = EditPanelExecuteHandler()
+            args.command.execute.add(onExec)
+            handlers.append(onExec)
+        except:
+            if ui:
+                ui.messageBox('Edit Panel setup failed:\n{}'.format(traceback.format_exc()))
+
+
+class EditPanelInputChangedHandler(adsk.core.InputChangedEventHandler):
+    def notify(self, args):
+        try:
+            # Reload the edge dropdowns when the selection or a tape name changes.
+            if args.input.id not in ('panelSel', 'epFitaThin', 'epFitaThick'):
+                return
+            sel = args.inputs.itemById('panelSel')
+            body = sel.selection(0).entity if sel and sel.selectionCount else None
+            _load_fita_dropdowns(args.inputs, body)
+        except:
+            if ui:
+                ui.messageBox('Edit Panel input failed:\n{}'.format(traceback.format_exc()))
+
+
+class EditPanelExecuteHandler(adsk.core.CommandEventHandler):
+    def notify(self, args):
+        try:
+            inputs = args.command.commandInputs
+            sel = inputs.itemById('panelSel')
+            thin = inputs.itemById('epFitaThin').value
+            thick = inputs.itemById('epFitaThick').value
+            names = {'none': '', 'thin': thin, 'thick': thick}
+            chosen = {
+                'fita_C1': names[_fita_choice_value(inputs.itemById('epC1').selectedItem.name)],
+                'fita_C2': names[_fita_choice_value(inputs.itemById('epC2').selectedItem.name)],
+                'fita_L1': names[_fita_choice_value(inputs.itemById('epL1').selectedItem.name)],
+                'fita_L2': names[_fita_choice_value(inputs.itemById('epL2').selectedItem.name)],
+            }
+            updated = 0
+            for i in range(sel.selectionCount):
+                body = sel.selection(i).entity
+                data = _read_panel_data(body)
+                if data is None:
+                    continue
+                data.update(chosen)
+                body.attributes.add(ATTR_GROUP, ATTR_NAME, json.dumps(data))
+                updated += 1
+            if updated == 0:
+                ui.messageBox('No FusionMob panels were updated (select tagged bodies).')
+        except:
+            if ui:
+                ui.messageBox('Edit Panel failed:\n{}'.format(traceback.format_exc()))
+
+
 class CabinetMarkingMenuHandler(adsk.core.MarkingMenuEventHandler):
     def notify(self, args):
-        global _context_edit_token
+        global _context_edit_token, _context_panel_token
         try:
             _context_edit_token = None
+            _context_panel_token = None
+            controls = args.linearMarkingMenu.controls
+
+            # Edit Panel: offered when a tagged body is directly selected.
+            body = _panel_body_from_collection(args.selectedEntities)
+            if body is None:
+                body = _panel_body_from_collection(ui.activeSelections)
+            if body is not None:
+                panel_def = ui.commandDefinitions.itemById(EDIT_PANEL_CMD_ID)
+                if panel_def:
+                    _context_panel_token = body.entityToken
+                    try:
+                        controls.addSeparator()
+                    except:
+                        pass
+                    controls.addCommand(panel_def)
+
             occ = _find_cabinet_occ(args)
             if not occ:
                 return
@@ -2471,7 +2798,6 @@ class CabinetMarkingMenuHandler(adsk.core.MarkingMenuEventHandler):
 
             # Append "Edit Cabinet" to the end of the native context menu, after
             # a separator so it reads as our own addition.
-            controls = args.linearMarkingMenu.controls
             try:
                 controls.addSeparator()
             except:
@@ -2479,7 +2805,7 @@ class CabinetMarkingMenuHandler(adsk.core.MarkingMenuEventHandler):
             controls.addCommand(cmd_def)
         except:
             # This handler fires on every right-click, so never surface errors
-            # here — a failure just means no "Edit Cabinet" entry this time.
+            # here — a failure just means no menu entry this time.
             pass
 
 
@@ -2682,12 +3008,6 @@ def _show_layout_palette():
 class CabinetLayoutCreatedHandler(adsk.core.CommandCreatedEventHandler):
     def notify(self, args):
         try:
-            inputs = args.command.commandInputs
-            inputs.addTextBoxCommandInput(
-                'info', '',
-                'O editor de layout do armario abriu em um painel lateral.\n'
-                'Divida o interior em regioes (prateleiras, portas, gavetas) e '
-                'clique Aplicar para (re)gerar o armario.', 4, True)
             _show_layout_palette()
         except Exception:
             if ui:
@@ -2732,6 +3052,9 @@ def run(context):
         _add_command(panel, NEW_PANEL_CMD_ID, 'New Panel',
                      'Create a parametric panel with edge banding',
                      NewPanelCreatedHandler(), 'new_panel')
+        _add_command(panel, EDIT_PANEL_CMD_ID, 'Edit Panel',
+                     'Edit a panel\'s edge banding (fita) in place',
+                     EditPanelCreatedHandler(), 'new_panel')
         _add_command(panel, NEW_CABINET_CMD_ID, 'New Cabinet',
                      'Create a cabinet carcass with shelves',
                      NewCabinetCreatedHandler(), 'new_cabinet', promoted=True)
@@ -2779,7 +3102,7 @@ def stop(context):
         if tab:
             panel = tab.toolbarPanels.itemById(PANEL_ID)
             if panel:
-                for cmd_id in (NEW_PANEL_CMD_ID, NEW_CABINET_CMD_ID,
+                for cmd_id in (NEW_PANEL_CMD_ID, EDIT_PANEL_CMD_ID, NEW_CABINET_CMD_ID,
                                EDIT_CABINET_CMD_ID, LAYOUT_CMD_ID, EXPORT_CMD_ID):
                     ctrl = panel.controls.itemById(cmd_id)
                     if ctrl:
@@ -2787,7 +3110,7 @@ def stop(context):
                 panel.deleteMe()
             tab.deleteMe()
 
-        for cmd_id in (NEW_PANEL_CMD_ID, EXPORT_CMD_ID):
+        for cmd_id in (NEW_PANEL_CMD_ID, EDIT_PANEL_CMD_ID, EXPORT_CMD_ID):
             cmd_def = ui.commandDefinitions.itemById(cmd_id)
             if cmd_def:
                 cmd_def.deleteMe()

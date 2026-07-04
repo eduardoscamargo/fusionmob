@@ -5,114 +5,485 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FusionMob - Layout</title>
 <style>
-  :root { --bg:#f4f4f4; --panel:#fff; --line:#c9c9c9; --ink:#222; --muted:#666;
-          --accent:#0a7; --sel:#0a84ff; }
-  * { box-sizing: border-box; }
-  body { margin:0; font:13px/1.4 "Segoe UI",Arial,sans-serif; color:var(--ink);
-         background:var(--bg); }
-  h3 { margin:14px 8px 4px; font-size:12px; text-transform:uppercase;
-       letter-spacing:.04em; color:var(--muted); }
-  .wrap { padding:8px; }
-  .row { display:flex; align-items:center; gap:6px; margin:4px 0; }
-  .row label { flex:0 0 128px; color:var(--muted); }
-  .row .grow { flex:1 1 auto; }
-  input[type=number], select { width:100%; padding:3px 5px; border:1px solid var(--line);
-       border-radius:4px; background:#fff; }
-  input[type=checkbox] { width:16px; height:16px; }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:6px;
-          padding:8px; margin:6px 0; }
-  .btns { display:flex; flex-wrap:wrap; gap:6px; }
-  button { padding:5px 9px; border:1px solid var(--line); border-radius:5px;
-           background:#fff; cursor:pointer; font-size:12px; }
-  button:hover { background:#eee; }
-  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
-  button.primary:hover { filter:brightness(1.07); }
-  button:disabled { opacity:.5; cursor:default; }
-  #canvasWrap { display:flex; justify-content:center; background:#eaeaea;
-                border:1px solid var(--line); border-radius:6px; padding:8px; }
-  svg { max-width:100%; height:auto; max-height:340px; }
+  /* ---------------------------------------------------------------------------
+     Fusion 360-inspired dark theme. Charcoal surfaces, Autodesk teal-blue accent.
+     Single narrow column (the palette docks at ~480px). Progressive disclosure:
+     the beginner Wizard and the plain-language essentials come first; every
+     shop-level knob lives inside collapsed "Avancado" sections.
+  --------------------------------------------------------------------------- */
+  :root {
+    --bg:#2b2b2b; --bg-2:#323232; --panel:#3a3a3a; --panel-2:#434343;
+    --line:#242424; --line-2:#4d4d4d;
+    --ink:#e8e8e8; --muted:#9a9a9a; --faint:#777;
+    --accent:#0696d7; --accent-2:#29b6e8; --accent-ink:#fff;
+    --ok:#6cc04a; --warn:#e6a23c; --err:#ec5b56;
+    --sh-open:#4a4a4a; --sh-shelves:#2f5d78; --sh-doors:#2f6b4a; --sh-drawers:#8a5a24;
+    --radius:6px;
+  }
+  * { box-sizing:border-box; }
+  html,body { height:100%; }
+  body { margin:0; font:13px/1.45 "Segoe UI",Roboto,Arial,sans-serif; color:var(--ink);
+         background:var(--bg); -webkit-font-smoothing:antialiased; }
+  h1,h2,h3,h4 { margin:0; font-weight:600; }
+  button { font-family:inherit; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#555; border-radius:6px; border:2px solid var(--bg); }
+  ::-webkit-scrollbar-track { background:transparent; }
+
+  /* ---- layout shell ---- */
+  .app { display:flex; flex-direction:column; height:100vh; }
+  .topbar { display:flex; align-items:center; gap:8px; padding:8px 12px;
+            background:linear-gradient(180deg,#3d3d3d,#333); border-bottom:1px solid var(--line);
+            flex:0 0 auto; }
+  .brand { display:flex; align-items:center; gap:8px; margin-right:auto; }
+  .brand .logo { width:22px; height:22px; border-radius:5px; flex:0 0 auto;
+                 background:linear-gradient(135deg,var(--accent),#0b6ea8);
+                 display:flex; align-items:center; justify-content:center; }
+  .brand .logo svg { width:14px; height:14px; }
+  .brand .title { font-size:13px; font-weight:600; letter-spacing:.02em; }
+  .brand .sub { font-size:10px; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; }
+
+  .scroll { flex:1 1 auto; overflow-y:auto; overflow-x:hidden; padding:12px; }
+
+  /* ---- cards & sections ---- */
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+          margin:0 0 12px; overflow:hidden; }
+  .card > .head { display:flex; align-items:center; gap:8px; padding:10px 12px;
+                  font-size:12px; font-weight:600; letter-spacing:.03em; }
+  .card > .head .ic { color:var(--accent-2); display:flex; }
+  .card > .body { padding:4px 12px 12px; }
+
+  .section { border:1px solid var(--line); border-radius:var(--radius); margin:0 0 10px;
+             background:var(--bg-2); overflow:hidden; }
+  .section > .shead { display:flex; align-items:center; gap:8px; width:100%; cursor:pointer;
+                      padding:11px 12px; background:none; border:0; color:var(--ink);
+                      font-size:12px; font-weight:600; text-align:left; letter-spacing:.02em; }
+  .section > .shead:hover { background:var(--panel); }
+  .section > .shead .chev { margin-left:auto; transition:transform .15s ease; color:var(--muted); }
+  .section > .sbody { padding:2px 12px 12px; display:none; }
+  .section.open > .sbody { display:block; }
+  .section.open > .shead .chev { transform:rotate(90deg); }
+  .section .tag { font-size:10px; color:var(--faint); font-weight:400; text-transform:none;
+                  letter-spacing:0; }
+
+  /* ---- form rows ---- */
+  .row { display:flex; align-items:center; gap:8px; margin:8px 0; }
+  .row > label { flex:0 0 130px; color:var(--muted); font-size:12px; }
+  .row .grow { flex:1 1 auto; min-width:0; }
+  .hint { color:var(--faint); font-size:11px; margin:0 0 8px; }
+  .subhead { font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+             color:var(--faint); margin:14px 0 4px; }
+
+  input[type=number], input[type=text], select {
+    width:100%; padding:6px 8px; border:1px solid var(--line-2); border-radius:5px;
+    background:#2c2c2c; color:var(--ink); font-size:12px; outline:none; }
+  input[type=number]:focus, input[type=text]:focus, select:focus {
+    border-color:var(--accent); box-shadow:0 0 0 2px rgba(6,150,215,.25); }
+  select { cursor:pointer; }
+
+  /* number field with unit suffix */
+  .field { position:relative; flex:1 1 auto; }
+  .field .unit { position:absolute; right:8px; top:50%; transform:translateY(-50%);
+                 font-size:10px; color:var(--faint); pointer-events:none; }
+  .field input { padding-right:26px; }
+
+  /* switch (checkbox) */
+  .sw { position:relative; display:inline-block; width:38px; height:20px; flex:0 0 auto; }
+  .sw input { position:absolute; inset:0; width:100%; height:100%; margin:0;
+              opacity:0; cursor:pointer; z-index:2; }
+  .sw .track { position:absolute; inset:0; background:#555; border-radius:20px;
+               transition:.15s; cursor:pointer; }
+  .sw .track:before { content:""; position:absolute; width:16px; height:16px; left:2px; top:2px;
+                      background:#ddd; border-radius:50%; transition:.15s; }
+  .sw input:checked + .track { background:var(--accent); }
+  .sw input:checked + .track:before { transform:translateX(18px); background:#fff; }
+
+  /* stepper */
+  .stepper { display:inline-flex; align-items:center; border:1px solid var(--line-2);
+             border-radius:5px; overflow:hidden; background:#2c2c2c; }
+  .stepper button { width:28px; height:28px; border:0; background:#3a3a3a; color:var(--ink);
+                    font-size:15px; cursor:pointer; }
+  .stepper button:hover { background:var(--accent); }
+  .stepper input { width:44px; text-align:center; border:0; border-left:1px solid var(--line-2);
+                   border-right:1px solid var(--line-2); border-radius:0; background:transparent; }
+
+  /* buttons */
+  .btns { display:flex; flex-wrap:wrap; gap:8px; }
+  .btn { padding:7px 12px; border:1px solid var(--line-2); border-radius:5px;
+         background:#454545; color:var(--ink); cursor:pointer; font-size:12px; font-weight:500;
+         display:inline-flex; align-items:center; gap:6px; }
+  .btn:hover { background:#525252; border-color:#666; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .btn.primary:hover { background:var(--accent-2); }
+  .btn.ghost { background:transparent; }
+  .btn:disabled { opacity:.45; cursor:default; }
+  .btn svg { width:14px; height:14px; }
+
+  /* ---- dimension diagram ---- */
+  .diagram { background:#262626; border:1px solid var(--line); border-radius:var(--radius);
+             padding:8px; margin-bottom:10px; }
+  .diagram svg { width:100%; height:auto; display:block; }
+  .dim line { stroke:var(--muted); stroke-width:1; }
+  .dim text { fill:var(--muted); font-size:11px; font-weight:600; }
+  .dim.active line { stroke:var(--accent-2); stroke-width:2; }
+  .dim.active text { fill:var(--accent-2); }
+  .cab-face { fill:#3d3d3d; stroke:#666; stroke-width:1.2; }
+  .cab-top  { fill:#4a4a4a; stroke:#666; stroke-width:1.2; }
+  .cab-side { fill:#333; stroke:#666; stroke-width:1.2; }
+
+  /* ---- region canvas ---- */
+  #canvasWrap { background:#262626; border:1px solid var(--line); border-radius:var(--radius);
+                padding:10px; display:flex; justify-content:center; }
+  #canvas { max-width:100%; height:auto; max-height:360px; }
   .leaf { cursor:pointer; }
-  .leaf-label { font-size:11px; fill:#333; pointer-events:none; }
-  #status { min-height:18px; padding:4px 2px; font-size:12px; }
-  .ok { color:var(--accent); }
-  .err { color:#c0392b; }
-  .hint { color:var(--muted); font-size:11px; margin:2px 0 6px; }
-  .pill { display:inline-block; padding:1px 6px; border-radius:10px; font-size:11px;
-          background:#e8e8e8; color:#555; }
+  .leaf-label { font-weight:600; pointer-events:none; }
+
+  /* ---- type picker tiles ---- */
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:6px 0 4px; }
+  .tile { border:1px solid var(--line-2); border-radius:6px; background:#2c2c2c; cursor:pointer;
+          padding:8px 4px 6px; text-align:center; color:var(--muted); transition:.12s; }
+  .tile:hover { border-color:#777; color:var(--ink); }
+  .tile.on { border-color:var(--accent); background:rgba(6,150,215,.15); color:var(--ink); }
+  .tile svg { width:26px; height:26px; display:block; margin:0 auto 3px; }
+  .tile .t { font-size:10px; }
+  .tile:disabled { opacity:.4; cursor:default; }
+
+  /* selection pill / meta */
+  .pill { display:inline-block; padding:2px 9px; border-radius:11px; font-size:11px;
+          background:#4a4a4a; color:var(--ink); }
+  .swatch { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px;
+            vertical-align:middle; }
+
+  /* ---- action bar (sticky footer) ---- */
+  .actionbar { flex:0 0 auto; border-top:1px solid var(--line); background:#333;
+               padding:8px 12px; }
+  #status { min-height:16px; font-size:11px; margin-bottom:7px; display:flex; align-items:center; gap:6px; }
+  #status .dot { width:7px; height:7px; border-radius:50%; background:var(--muted); flex:0 0 auto; }
+  #status.ok .dot { background:var(--ok); } #status.ok { color:var(--ok); }
+  #status.err .dot { background:var(--err); } #status.err { color:var(--err); }
+  #status.warn .dot { background:var(--warn); } #status.warn { color:var(--warn); }
+  .actionbar .btns { align-items:center; }
+  .actionbar .grow { flex:1 1 auto; }
+
+  .banner { background:rgba(230,162,60,.14); border:1px solid rgba(230,162,60,.4);
+            color:#e6c07a; border-radius:5px; padding:7px 10px; font-size:11px; margin-bottom:10px;
+            display:none; }
+  .banner.show { display:block; }
+
+  /* ---- wizard overlay ---- */
+  .wizard { position:absolute; inset:0; background:var(--bg); display:none; flex-direction:column;
+            z-index:20; }
+  .wizard.show { display:flex; }
+  .wiz-head { padding:14px 16px 10px; border-bottom:1px solid var(--line); background:#333; }
+  .wiz-head .k { font-size:10px; color:var(--accent-2); letter-spacing:.1em; text-transform:uppercase; }
+  .wiz-head h2 { font-size:17px; margin:3px 0 8px; }
+  .steps { display:flex; gap:6px; }
+  .steps .s { flex:1; height:4px; border-radius:3px; background:#4a4a4a; }
+  .steps .s.done { background:var(--accent); }
+  .steps .s.cur { background:var(--accent-2); }
+  .wiz-body { flex:1 1 auto; overflow-y:auto; padding:16px; }
+  .wiz-foot { flex:0 0 auto; border-top:1px solid var(--line); padding:10px 16px;
+              display:flex; gap:8px; background:#333; }
+  .wiz-foot .grow { flex:1 1 auto; }
+  .steplead { color:var(--muted); font-size:12px; margin:0 0 14px; }
+
+  .choices { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .choice { border:1px solid var(--line-2); border-radius:8px; background:var(--bg-2); cursor:pointer;
+            padding:12px; text-align:left; color:var(--ink); transition:.12s; display:flex;
+            flex-direction:column; gap:8px; }
+  .choice:hover { border-color:#777; }
+  .choice.on { border-color:var(--accent); box-shadow:0 0 0 2px rgba(6,150,215,.3); }
+  .choice svg { width:100%; height:70px; }
+  .choice .cn { font-size:12px; font-weight:600; }
+  .choice .cd { font-size:11px; color:var(--muted); }
+  .choice.wide { grid-column:1 / -1; flex-direction:row; align-items:center; }
+  .choice.wide svg { width:96px; height:60px; flex:0 0 auto; }
+
+  .review { background:var(--bg-2); border:1px solid var(--line); border-radius:8px; padding:14px; }
+  .review .rrow { display:flex; padding:6px 0; border-bottom:1px solid var(--line); font-size:12px; }
+  .review .rrow:last-child { border-bottom:0; }
+  .review .rrow .rk { flex:0 0 120px; color:var(--muted); }
+  .review .rrow .rv { color:var(--ink); font-weight:500; }
+
+  .hidden { display:none !important; }
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="app">
 
-  <div id="status">Conectando ao Fusion...</div>
-
-  <div class="row">
-    <label>Armario</label>
-    <select id="target" class="grow"></select>
-  </div>
-
-  <h3>Carcaca</h3>
-  <div class="card">
-    <div class="row"><label>Largura (W) mm</label><input type="number" id="W" step="1"></div>
-    <div class="row"><label>Altura (H) mm</label><input type="number" id="H" step="1"></div>
-    <div class="row"><label>Profundidade (D) mm</label><input type="number" id="D" step="1"></div>
-    <div class="row"><label>Espessura (t) mm</label><input type="number" id="t" step="1"></div>
-    <div class="row"><label>Material</label><select id="material" class="grow"></select></div>
-    <div class="row"><label>Fundo</label><input type="checkbox" id="with_back"><span class="grow"></span></div>
-    <div class="row"><label>Rodape</label><input type="checkbox" id="with_toe_kick"><span class="grow"></span></div>
-    <div class="row"><label>Altura rodape mm</label><input type="number" id="toe_kick_height" step="1"></div>
-    <div class="row"><label>Furacao dobradica</label><input type="checkbox" id="with_hinges"><span class="grow"></span></div>
-    <div class="row"><label>Material porta</label><select id="door_material" class="grow"></select></div>
-    <div class="row"><label>Corredica</label><select id="slide_key" class="grow"></select></div>
-    <div class="row"><label>Modelo 3D corredica</label><input type="checkbox" id="insert_real_hardware"><span class="grow"></span></div>
-  </div>
-
-  <h3>Interior (regioes)</h3>
-  <p class="hint">Clique numa regiao para selecionar. Divida na horizontal/vertical,
-     mude o tipo, ou remova para juntar com a vizinha.</p>
-  <div id="canvasWrap"><svg id="canvas" viewBox="0 0 100 100"></svg></div>
-
-  <div class="card" id="inspector">
-    <div class="row"><label>Regiao</label><span class="grow"><span class="pill" id="selInfo">nenhuma</span></span></div>
-    <div class="row"><label>Tipo</label>
-      <select id="leafType" class="grow">
-        <option value="open">Vazio</option>
-        <option value="shelves">Prateleiras</option>
-        <option value="doors">Portas</option>
-        <option value="drawers">Gavetas</option>
-      </select>
+  <!-- ============================ TOP BAR ============================ -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 7l8-4 8 4-8 4-8-4z" fill="#fff" opacity=".95"/>
+          <path d="M4 7v10l8 4V11L4 7z" fill="#fff" opacity=".55"/>
+          <path d="M20 7v10l-8 4V11l8-4z" fill="#fff" opacity=".75"/></svg>
+      </span>
+      <span>
+        <span class="title">FusionMob</span><br>
+        <span class="sub">Editor de Armário</span>
+      </span>
     </div>
-    <div class="row" id="rowCount"><label>Quantidade</label><input type="number" id="leafCount" min="1" step="1"></div>
-    <div class="row" id="rowInset"><label>Embutida (inset)</label><input type="checkbox" id="leafInset"><span class="grow"></span></div>
-    <div class="row" id="rowSize">
-      <label>Tamanho</label>
-      <input type="number" id="leafSize" step="1" style="flex:1">
-      <label style="flex:0 0 auto; margin-left:6px;">fixo mm</label>
-      <input type="checkbox" id="leafFixed">
+    <button class="btn ghost" id="openWizard" title="Assistente passo a passo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2l1.9 4.6L19 8l-3.6 3.3L16 16l-4-2.3L8 16l.6-4.7L5 8l5.1-1.4z"/></svg>
+      Assistente
+    </button>
+  </header>
+
+  <!-- ============================ EDITOR ============================ -->
+  <div class="scroll" id="editorScroll">
+
+    <div class="banner" id="demoBanner">
+      Modo demonstração — sem conexão com o Fusion 360. Você pode explorar a
+      interface, mas <b>Aplicar</b> só funciona dentro do Fusion.
     </div>
-    <div class="btns" style="margin-top:6px;">
-      <button id="splitV">Dividir horizontal —</button>
-      <button id="splitH">Dividir vertical |</button>
-      <button id="del">Remover regiao</button>
+
+    <!-- target -->
+    <div class="row">
+      <label>Armário</label>
+      <select id="target" class="grow"></select>
+    </div>
+
+    <!-- DIMENSIONS -->
+    <div class="card">
+      <div class="head"><span class="ic">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M9 4v16"/></svg>
+      </span>Medidas do armário</div>
+      <div class="body">
+        <div class="diagram">
+          <svg viewBox="-24 0 286 210" id="dimDiagram"></svg>
+        </div>
+        <div class="row"><label>Largura (L)</label>
+          <div class="field"><input type="number" id="W" step="10" data-dim="W"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Altura (A)</label>
+          <div class="field"><input type="number" id="H" step="10" data-dim="H"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Profundidade (P)</label>
+          <div class="field"><input type="number" id="D" step="10" data-dim="D"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Material</label><select id="material" class="grow"></select></div>
+        <div class="row"><label>Espessura (chapa)</label>
+          <div class="field"><input type="number" id="t" step="1" data-dim="t"><span class="unit">mm</span></div></div>
+        <p class="hint">A altura inclui o rodapé. A espessura é a grossura da chapa (ex.: 18 mm).</p>
+      </div>
+    </div>
+
+    <!-- INTERIOR -->
+    <div class="card">
+      <div class="head"><span class="ic">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M12 9v12"/></svg>
+      </span>Interior</div>
+      <div class="body">
+        <p class="hint">Clique numa região para selecioná-la. Escolha o que vai nela,
+           divida em linhas/colunas, ou remova para juntar com a vizinha.</p>
+        <div id="canvasWrap"><svg id="canvas" viewBox="0 0 100 100"></svg></div>
+
+        <div class="subhead">Região selecionada: <span class="pill" id="selInfo">nenhuma</span></div>
+
+        <div class="tiles" id="typeTiles">
+          <button class="tile" data-type="open"    id="tileOpen">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="28" height="28" rx="2"/></svg>
+            <span class="t">Vazio</span></button>
+          <button class="tile" data-type="shelves" id="tileShelves">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="28" height="28" rx="2"/><path d="M6 17h28M6 26h28"/></svg>
+            <span class="t">Prateleiras</span></button>
+          <button class="tile" data-type="doors"   id="tileDoors">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="28" height="28" rx="2"/><path d="M20 6v28"/><circle cx="16" cy="20" r="1.6" fill="currentColor"/><circle cx="24" cy="20" r="1.6" fill="currentColor"/></svg>
+            <span class="t">Portas</span></button>
+          <button class="tile" data-type="drawers" id="tileDrawers">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="28" height="28" rx="2"/><path d="M6 16h28M6 25h28"/><path d="M17 11h6M17 20.5h6M17 29.5h6" stroke-width="2.4"/></svg>
+            <span class="t">Gavetas</span></button>
+        </div>
+
+        <!-- per-region options -->
+        <div id="rowCount" class="row"><label>Quantidade</label>
+          <span class="stepper">
+            <button type="button" id="countDown">−</button>
+            <input type="number" id="leafCount" min="1" step="1">
+            <button type="button" id="countUp">+</button>
+          </span>
+        </div>
+        <div id="rowShelvesBehind" class="row"><label>Prateleiras atrás</label>
+          <span class="stepper">
+            <button type="button" id="sbDown">−</button>
+            <input type="number" id="leafShelvesBehind" min="0" step="1">
+            <button type="button" id="sbUp">+</button>
+          </span>
+        </div>
+        <div id="rowInset" class="row"><label>Embutida (por dentro)</label>
+          <span class="sw"><input type="checkbox" id="leafInset"><span class="track"></span></span></div>
+        <div id="rowAlign" class="row"><label>Alinhar com a frente</label>
+          <span class="sw"><input type="checkbox" id="leafAlign"><span class="track"></span></span></div>
+        <div id="rowSize" class="row"><label>Tamanho</label>
+          <div class="field"><input type="number" id="leafSize" step="1"><span class="unit" id="leafSizeUnit">peso</span></div>
+          <label style="flex:0 0 auto; color:var(--muted);">fixo</label>
+          <span class="sw"><input type="checkbox" id="leafFixed"><span class="track"></span></span></div>
+
+        <div class="btns" style="margin-top:10px;">
+          <button class="btn" id="splitV">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 12h16"/></svg>
+            Dividir em linhas</button>
+          <button class="btn" id="splitH">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16"/></svg>
+            Dividir em colunas</button>
+          <button class="btn" id="del">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            Remover</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STRUCTURE (intermediate) -->
+    <div class="section" id="secStructure">
+      <button class="shead" data-toggle="secStructure">
+        <span>Estrutura</span><span class="tag">— fundo &amp; rodapé</span>
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="sbody">
+        <div class="subhead">Fundo (back panel)</div>
+        <div class="row"><label>Tem fundo</label>
+          <span class="sw"><input type="checkbox" id="with_back"><span class="track"></span></span></div>
+        <div class="row"><label>Material do fundo</label><select id="back_material" class="grow"></select></div>
+        <div class="row"><label>Espessura do fundo</label>
+          <div class="field"><input type="number" id="back_t" step="1"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Recuo do fundo</label>
+          <div class="field"><input type="number" id="back_setback" step="1"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Profund. da ranhura</label>
+          <div class="field"><input type="number" id="dado_depth" step="1"><span class="unit">mm</span></div></div>
+
+        <div class="subhead">Rodapé (toe kick)</div>
+        <div class="row"><label>Tem rodapé</label>
+          <span class="sw"><input type="checkbox" id="with_toe_kick"><span class="track"></span></span></div>
+        <div class="row"><label>Material do rodapé</label><select id="toe_kick_material" class="grow"></select></div>
+        <div class="row"><label>Altura do rodapé</label>
+          <div class="field"><input type="number" id="toe_kick_height" step="1"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Espessura do rodapé</label>
+          <div class="field"><input type="number" id="toe_kick_t" step="1"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Recuo do rodapé</label>
+          <div class="field"><input type="number" id="toe_kick_setback" step="1"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Vão máx. sem reforço</label>
+          <div class="field"><input type="number" id="toe_kick_max_span" step="10"><span class="unit">mm</span></div></div>
+      </div>
+    </div>
+
+    <!-- FRONTS & HARDWARE (intermediate) -->
+    <div class="section" id="secFronts">
+      <button class="shead" data-toggle="secFronts">
+        <span>Frentes &amp; ferragens</span><span class="tag">— portas, gavetas, corrediças</span>
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="sbody">
+        <div class="subhead">Portas</div>
+        <div class="row"><label>Material da porta</label><select id="door_material" class="grow"></select></div>
+        <div class="row"><label>Espessura da porta</label>
+          <div class="field"><input type="number" id="door_t" step="1"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Folga / fresta</label>
+          <div class="field"><input type="number" id="door_gap" step="0.5"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Fita da porta</label><input type="text" id="door_band" class="grow"></div>
+        <div class="row"><label>Furação de dobradiça</label>
+          <span class="sw"><input type="checkbox" id="with_hinges"><span class="track"></span></span></div>
+
+        <div class="subhead">Gavetas</div>
+        <div class="row"><label>Corrediça</label><select id="slide_key" class="grow"></select></div>
+        <div class="row"><label>Material da caixa</label><select id="drawer_box_material" class="grow"></select></div>
+        <div class="row"><label>Material da frente</label><select id="drawer_face_material" class="grow"></select></div>
+        <div class="row"><label>Espessura da frente</label>
+          <div class="field"><input type="number" id="drawer_face_t" step="1"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Folga / fresta</label>
+          <div class="field"><input type="number" id="drawer_gap" step="0.5"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Fita da frente</label><input type="text" id="drawer_face_band" class="grow"></div>
+        <div class="row"><label>Inserir modelo 3D</label>
+          <span class="sw"><input type="checkbox" id="insert_real_hardware"><span class="track"></span></span></div>
+      </div>
+    </div>
+
+    <!-- ADVANCED -->
+    <div class="section" id="secAdvanced">
+      <button class="shead" data-toggle="secAdvanced">
+        <span>Avançado</span><span class="tag">— tolerâncias &amp; dobradiça</span>
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="sbody">
+        <p class="hint">Valores finos de encaixe e furação. Os padrões seguem a prática de
+           marcenaria; ajuste só se souber o que está fazendo.</p>
+        <div class="subhead">Tolerâncias</div>
+        <div class="row"><label>Folga fundo da ranhura</label>
+          <div class="field"><input type="number" id="tol_dado_bottom_clearance" step="0.1"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Folga lateral da ranhura</label>
+          <div class="field"><input type="number" id="tol_dado_side_clearance" step="0.1"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Folga prateleira-fundo</label>
+          <div class="field"><input type="number" id="tol_shelf_back_gap" step="0.5"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Recuo frontal (prat.)</label>
+          <div class="field"><input type="number" id="tol_shelf_front_setback" step="1"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Folga prateleira-porta</label>
+          <div class="field"><input type="number" id="tol_shelf_door_clearance" step="0.5"><span class="unit">mm</span></div></div>
+
+        <div class="subhead">Dobradiça (furação de caneco)</div>
+        <div class="row"><label>Diâmetro do caneco</label>
+          <div class="field"><input type="number" id="hinge_cup_diameter" step="0.5"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Profund. do caneco</label>
+          <div class="field"><input type="number" id="hinge_cup_depth" step="0.5"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Borda ao centro</label>
+          <div class="field"><input type="number" id="hinge_cup_edge" step="0.5"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Recuo das pontas</label>
+          <div class="field"><input type="number" id="hinge_end_inset" step="5"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Folga da prateleira</label>
+          <div class="field"><input type="number" id="hinge_shelf_clearance" step="1"><span class="unit">mm</span></div></div>
+      </div>
+    </div>
+
+    <div style="height:4px;"></div>
+  </div>
+
+  <!-- ============================ ACTION BAR ============================ -->
+  <footer class="actionbar">
+    <div id="status"><span class="dot"></span><span id="statusMsg">Conectando ao Fusion…</span></div>
+    <div class="btns">
+      <button class="btn ghost" id="reload" title="Recarregar do Fusion">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>
+        Recarregar</button>
+      <span class="grow"></span>
+      <button class="btn primary" id="apply">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        Aplicar / Gerar</button>
+    </div>
+  </footer>
+
+  <!-- ============================ WIZARD ============================ -->
+  <div class="wizard" id="wizard">
+    <div class="wiz-head">
+      <div class="k">Assistente</div>
+      <h2 id="wizTitle">Vamos montar seu armário</h2>
+      <div class="steps" id="wizSteps"></div>
+    </div>
+    <div class="wiz-body" id="wizBody"></div>
+    <div class="wiz-foot">
+      <button class="btn ghost" id="wizCancel">Fechar</button>
+      <span class="grow"></span>
+      <button class="btn" id="wizBack">Voltar</button>
+      <button class="btn primary" id="wizNext">Continuar</button>
     </div>
   </div>
 
-  <div class="btns">
-    <button id="apply" class="primary">Aplicar / Gerar</button>
-    <button id="reload">Recarregar</button>
-  </div>
 </div>
 
 <script>
 "use strict";
-var TYPE_COLOR = { open:"#f7f7f7", shelves:"#dbeafe", doors:"#dcfce7", drawers:"#fde9c8" };
+
+/* Region type presentation. Colors reference the CSS custom-property palette so
+   the canvas glyphs match the type tiles. */
+var TYPE_COLOR = { open:"#3f3f3f", shelves:"#2f5d78", doors:"#2f6b4a", drawers:"#8a5a24" };
+var TYPE_FILL  = { open:"#3a3a3a", shelves:"#26424f", doors:"#264d3a", drawers:"#5c421f" };
 var TYPE_LABEL = { open:"Vazio", shelves:"Prateleiras", doors:"Portas", drawers:"Gavetas" };
 
-var state = { cfg:null, cabinets:[], materials:[], slides:[], target:"new", sel:null };
+var state = { cfg:null, cabinets:[], materials:[], slides:[], target:"new", sel:null, demo:false };
 
+/* ---- bridge to the add-in (unchanged contract) ------------------------------ */
 function send(action, obj){
-  // Talk to the add-in; resolve with the parsed JSON reply (or a marker object
-  // {__err}/{__raw} so the caller can surface what went wrong).
   try {
     if (typeof adsk !== "undefined" && adsk.fusionSendData){
       var ret = adsk.fusionSendData(action, JSON.stringify(obj||{}));
@@ -125,7 +496,9 @@ function send(action, obj){
   return Promise.resolve(null);   // adsk bridge not ready / running in a browser
 }
 
-/* ---- layout tree helpers (paths are arrays of child indices) ---- */
+/* ============================================================================
+   LAYOUT TREE HELPERS  (paths are arrays of child indices) — logic preserved
+============================================================================ */
 function isSplit(n){ return n && n.split !== undefined; }
 function getNode(path){
   var n = state.cfg.layout;
@@ -142,8 +515,8 @@ function setNode(path, val){
   var p = getNode(path.slice(0,-1));
   p.children[path[path.length-1]].node = val;
 }
-function newLeaf(){ return { type:"open", count:1, inset:false, gap:null,
-                             shelf_align_front:null, slide_key:null, shelves_behind:0 }; }
+function newLeaf(type){ return { type:type||"open", count:1, inset:false, gap:null,
+                                 shelf_align_front:null, slide_key:null, shelves_behind:0 }; }
 function splitLeaf(path, axis){
   var node = getNode(path);
   setNode(path, { split:axis, children:[
@@ -164,7 +537,7 @@ function deleteRegion(path){
   }
 }
 
-/* ---- geometry: interior rectangle in mm, y downward (0 = top) ---- */
+/* ---- interior geometry (mm, y downward: 0 = top) — logic preserved ---------- */
 function interiorDims(){
   var c = state.cfg, t = c.t;
   var kick = c.with_toe_kick ? c.toe_kick_height : 0;
@@ -202,32 +575,34 @@ function collectRects(node, path, x, y, w, h, t, out){
   }
 }
 
-/* ---- rendering ---- */
+/* ============================================================================
+   RENDERING — the region canvas draws readable glyphs per region type
+============================================================================ */
 function render(){
-  if (!state.cfg) return;          // nothing loaded yet — don't crash
+  if (!state.cfg) return;
   syncFormFromCfg();
+  renderDiagram();
   var dim = interiorDims();
   var svg = document.getElementById("canvas");
-  if (dim.w <= 0 || dim.h <= 0){ svg.innerHTML = ""; return; }
+  if (dim.w <= 0 || dim.h <= 0){ svg.innerHTML =
+      '<text x="50" y="50" fill="#e6a23c" font-size="6" text-anchor="middle">Medidas sem interior válido</text>';
+      svg.setAttribute("viewBox","0 0 100 100"); renderInspector(); validateNow(); return; }
   svg.setAttribute("viewBox", "0 0 " + dim.w + " " + dim.h);
   var out = [];
   collectRects(state.cfg.layout, [], 0, 0, dim.w, dim.h, dim.t, out);
-  var svgns = "http://www.w3.org/2000/svg", parts = "";
-  var selKey = state.sel ? state.sel.join(",") : " ";
+  var scale = Math.max(dim.w, dim.h);
+  var parts = "", selKey = state.sel ? state.sel.join(",") : " ";
   out.forEach(function(r){
-    if (r.divider){
-      parts += rect(r.x, r.y, r.w, r.h, "#9a9a9a", "none", 0, "");
-      return;
-    }
+    if (r.divider){ parts += rect(r.x, r.y, r.w, r.h, "#8a8a8a", "none", 0, ""); return; }
     var isSel = r.path.join(",") === selKey;
     parts += '<g class="leaf" data-path="'+r.path.join(",")+'">';
-    parts += rect(r.x, r.y, r.w, r.h, TYPE_COLOR[r.node.type]||"#fff",
-                  isSel ? "#0a84ff" : "#888", isSel ? Math.max(dim.t,6) : 1.5, "");
-    var cx = r.x + r.w/2, cy = r.y + r.h/2;
-    var lbl = TYPE_LABEL[r.node.type] || "Vazio";
+    parts += rect(r.x, r.y, r.w, r.h, TYPE_FILL[r.node.type]||"#3a3a3a",
+                  isSel ? "#0696d7" : "#666", isSel ? Math.max(dim.t*0.8,scale/90) : scale/220, "");
+    parts += leafGlyph(r.node, r.x, r.y, r.w, r.h, scale);
+    var cx = r.x + r.w/2, lbl = TYPE_LABEL[r.node.type] || "Vazio";
     if (r.node.type!=="open") lbl += " ("+r.node.count+")";
-    parts += '<text class="leaf-label" x="'+cx+'" y="'+cy+'" text-anchor="middle" '+
-             'dominant-baseline="middle" font-size="'+Math.max(dim.w,dim.h)/28+'">'+lbl+'</text>';
+    parts += '<text class="leaf-label" x="'+cx+'" y="'+(r.y+r.h-scale/38)+'" text-anchor="middle" '+
+             'fill="#dcdcdc" font-size="'+(scale/34)+'">'+lbl+'</text>';
     parts += '</g>';
   });
   svg.innerHTML = parts;
@@ -245,175 +620,546 @@ function rect(x,y,w,h,fill,stroke,sw,extra){
   return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" fill="'+fill+
          '" stroke="'+stroke+'" stroke-width="'+sw+'" '+extra+'/>';
 }
+/* Type-specific mini illustration drawn inside a region rect (mm units). */
+function leafGlyph(node, x, y, w, h, scale){
+  var n = Math.max(1, node.count||1), sw = scale/260, col = TYPE_COLOR[node.type]||"#888";
+  var pad = Math.min(w,h)*0.10, s = "";
+  var ix=x+pad, iy=y+pad, iw=w-2*pad, ih=h-2*pad;
+  if (iw<=0||ih<=0) return "";
+  if (node.type==="shelves"){
+    for (var i=1;i<=n;i++){
+      var yy = y + h*i/(n+1);
+      s += '<line x1="'+ix+'" y1="'+yy+'" x2="'+(x+w-pad)+'" y2="'+yy+'" stroke="'+col+'" stroke-width="'+(sw*2.4)+'"/>';
+    }
+  } else if (node.type==="doors"){
+    var dw = iw/n;
+    for (var d=0; d<n; d++){
+      var dx = ix + d*dw;
+      s += '<rect x="'+(dx+sw*2)+'" y="'+iy+'" width="'+(dw-sw*4)+'" height="'+ih+'" fill="none" stroke="'+col+'" stroke-width="'+(sw*2)+'"/>';
+      // handle on the swing edge (left doors hinge left => handle right, etc.)
+      var hx = (d < n/2) ? (dx+dw-sw*7) : (dx+sw*7);
+      s += '<circle cx="'+hx+'" cy="'+(y+h/2)+'" r="'+(sw*3)+'" fill="'+col+'"/>';
+    }
+  } else if (node.type==="drawers"){
+    var dh = ih/n;
+    for (var k=0;k<n;k++){
+      var dy = iy + k*dh;
+      s += '<rect x="'+ix+'" y="'+(dy+sw*2)+'" width="'+iw+'" height="'+(dh-sw*4)+'" fill="none" stroke="'+col+'" stroke-width="'+(sw*2)+'"/>';
+      s += '<line x1="'+(x+w/2-iw*0.16)+'" y1="'+(dy+dh/2)+'" x2="'+(x+w/2+iw*0.16)+'" y2="'+(dy+dh/2)+'" stroke="'+col+'" stroke-width="'+(sw*3)+'"/>';
+    }
+  }
+  return s;
+}
 
+/* ---- inspector (per-region controls) ---------------------------------------- */
 function renderInspector(){
   var sel = state.sel, has = sel !== null;
   var node = has ? getNode(sel) : null;
   var leaf = node && !isSplit(node);
-  document.getElementById("selInfo").textContent =
-    !has ? "interior inteiro" : (leaf ? (TYPE_LABEL[node.type]||"Vazio") : "grupo");
-  setDisabled("leafType", !leaf);
-  setDisabled("leafCount", !leaf || node.type==="open");
-  setDisabled("leafInset", !leaf || !(node.type==="doors"||node.type==="drawers"));
+  document.getElementById("selInfo").innerHTML =
+    !has ? "interior inteiro"
+         : (leaf ? '<span class="swatch" style="background:'+(TYPE_COLOR[node.type]||"#888")+'"></span>'+(TYPE_LABEL[node.type]||"Vazio")
+                 : "grupo (dividido)");
+
+  // type tiles
+  ["open","shelves","doors","drawers"].forEach(function(tp){
+    var el = document.getElementById("tile"+tp.charAt(0).toUpperCase()+tp.slice(1));
+    el.disabled = !leaf;
+    el.classList.toggle("on", leaf && node.type===tp);
+  });
+
+  var isDoors = leaf && node.type==="doors";
+  var isDrawers = leaf && node.type==="drawers";
+  var isShelves = leaf && node.type==="shelves";
+  var counted = leaf && node.type!=="open";
+  show("rowCount", counted);
+  show("rowShelvesBehind", isDoors);
+  show("rowInset", isDoors || isDrawers);
+  show("rowAlign", isShelves);
+
   var wrap = has ? getWrapper(sel) : null;
-  setDisabled("leafSize", !wrap); setDisabled("leafFixed", !wrap);
+  show("rowSize", !!wrap);
   setDisabled("splitV", !leaf); setDisabled("splitH", !leaf);
   setDisabled("del", !has || sel.length===0);
-  show("rowCount", leaf && node.type!=="open");
-  show("rowInset", leaf && (node.type==="doors"||node.type==="drawers"));
-  show("rowSize", !!wrap);
+
   if (leaf){
-    document.getElementById("leafType").value = node.type;
     document.getElementById("leafCount").value = node.count||1;
+    document.getElementById("leafShelvesBehind").value = node.shelves_behind||0;
     document.getElementById("leafInset").checked = !!node.inset;
+    var al = node.shelf_align_front;
+    document.getElementById("leafAlign").checked = (al===null||al===undefined) ? false : !!al;
   }
   if (wrap){
     document.getElementById("leafSize").value = Math.round(wrap.size*10)/10;
     document.getElementById("leafFixed").checked = !!wrap.fixed;
+    document.getElementById("leafSizeUnit").textContent = wrap.fixed ? "mm" : "peso";
   }
 }
 
-/* ---- form <-> cfg ---- */
+/* ============================================================================
+   DIMENSION DIAGRAM — an explainer oblique cabinet with dimension callouts
+============================================================================ */
+function renderDiagram(){
+  var svg = document.getElementById("dimDiagram");
+  if (!svg) return;
+  // Fixed stylized oblique box (not to scale) with W/A/P callouts.
+  var fx=42, fy=52, fw=118, fh=110, dx=42, dy=-30;   // front rect + depth vector
+  var bx=fx+dx, by=fy+dy;                            // back-top-left
+  svg.innerHTML =
+    // top face
+    '<polygon class="cab-top" points="'+fx+','+fy+' '+(fx+fw)+','+fy+' '+(fx+fw+dx)+','+(fy+dy)+' '+(fx+dx)+','+(fy+dy)+'"/>'+
+    // right side face
+    '<polygon class="cab-side" points="'+(fx+fw)+','+fy+' '+(fx+fw+dx)+','+(fy+dy)+' '+(fx+fw+dx)+','+(fy+fh+dy)+' '+(fx+fw)+','+(fy+fh)+'"/>'+
+    // front face
+    '<rect class="cab-face" x="'+fx+'" y="'+fy+'" width="'+fw+'" height="'+fh+'" rx="1"/>'+
+    // thickness hint (front-left edge)
+    '<rect x="'+fx+'" y="'+fy+'" width="7" height="'+fh+'" fill="#555" stroke="#666" data-dim="t"/>'+
+    // Width dimension (below front)
+    '<g class="dim" data-dim="W"><line x1="'+fx+'" y1="'+(fy+fh+16)+'" x2="'+(fx+fw)+'" y2="'+(fy+fh+16)+'"/>'+
+      '<line x1="'+fx+'" y1="'+(fy+fh+11)+'" x2="'+fx+'" y2="'+(fy+fh+21)+'"/>'+
+      '<line x1="'+(fx+fw)+'" y1="'+(fy+fh+11)+'" x2="'+(fx+fw)+'" y2="'+(fy+fh+21)+'"/>'+
+      '<text x="'+(fx+fw/2)+'" y="'+(fy+fh+30)+'" text-anchor="middle" id="dimTextW">L</text></g>'+
+    // Height dimension (left of front)
+    '<g class="dim" data-dim="H"><line x1="'+(fx-16)+'" y1="'+fy+'" x2="'+(fx-16)+'" y2="'+(fy+fh)+'"/>'+
+      '<line x1="'+(fx-21)+'" y1="'+fy+'" x2="'+(fx-11)+'" y2="'+fy+'"/>'+
+      '<line x1="'+(fx-21)+'" y1="'+(fy+fh)+'" x2="'+(fx-11)+'" y2="'+(fy+fh)+'"/>'+
+      '<text x="'+(fx-22)+'" y="'+(fy+fh/2)+'" text-anchor="end" id="dimTextH">A</text></g>'+
+    // Depth dimension (along top-right oblique)
+    '<g class="dim" data-dim="D"><line x1="'+(fx+fw+6)+'" y1="'+(fy+3)+'" x2="'+(bx+fw+6)+'" y2="'+(by+3)+'"/>'+
+      '<text x="'+(fx+fw+dx/2+12)+'" y="'+(fy+dy/2+2)+'" id="dimTextD">P</text></g>';
+  // fill in current values
+  var c = state.cfg;
+  if (c){
+    setText("dimTextW","L "+fmt(c.W));
+    setText("dimTextH","A "+fmt(c.H));
+    setText("dimTextD","P "+fmt(c.D));
+  }
+}
+function fmt(v){ return (Math.round(v)||0)+""; }
+function setText(id,t){ var el=document.getElementById(id); if(el) el.textContent=t; }
+function highlightDim(which, on){
+  Array.prototype.forEach.call(document.querySelectorAll("#dimDiagram .dim"), function(g){
+    g.classList.toggle("active", on && g.getAttribute("data-dim")===which);
+  });
+}
+
+/* ============================================================================
+   FORM  <->  CFG   (numbers, switches, selects, nested tol/hinge/drawer)
+============================================================================ */
+var NUMS = ["W","H","D","t","toe_kick_height","toe_kick_setback","toe_kick_t",
+            "toe_kick_max_span","back_t","dado_depth","back_setback",
+            "door_t","door_gap","drawer_face_t","drawer_gap"];
+var BOOLS = ["with_back","with_toe_kick","with_hinges","insert_real_hardware"];
+var SELS = ["material","back_material","toe_kick_material","door_material"];
+var TEXTS = ["door_band"];
+// nested: cfg.drawer.*  /  cfg.tol.*  /  cfg.hinge.*   -> element id : [dict, key]
+var NESTED = {
+  drawer_box_material:["drawer","box_material"], drawer_face_material:["drawer","face_material"],
+  drawer_face_band:["drawer","face_band"],
+  tol_dado_bottom_clearance:["tol","dado_bottom_clearance"],
+  tol_dado_side_clearance:["tol","dado_side_clearance"],
+  tol_shelf_back_gap:["tol","shelf_back_gap"],
+  tol_shelf_front_setback:["tol","shelf_front_setback"],
+  tol_shelf_door_clearance:["tol","shelf_door_clearance"],
+  hinge_cup_diameter:["hinge","cup_diameter"], hinge_cup_depth:["hinge","cup_depth"],
+  hinge_cup_edge:["hinge","cup_edge"], hinge_end_inset:["hinge","end_inset"],
+  hinge_shelf_clearance:["hinge","shelf_clearance"]
+};
+var NESTED_NUM = {  // which nested ids are numeric (the rest are select/text)
+  tol_dado_bottom_clearance:1, tol_dado_side_clearance:1, tol_shelf_back_gap:1,
+  tol_shelf_front_setback:1, tol_shelf_door_clearance:1, hinge_cup_diameter:1,
+  hinge_cup_depth:1, hinge_cup_edge:1, hinge_end_inset:1, hinge_shelf_clearance:1
+};
+
 function syncFormFromCfg(){
   var c = state.cfg;
-  ["W","H","D","t","toe_kick_height"].forEach(function(k){
-    var el=document.getElementById(k); if (el) el.value = c[k];
-  });
-  ["with_back","with_toe_kick","with_hinges","insert_real_hardware"].forEach(function(k){
-    var el=document.getElementById(k); if (el) el.checked = !!c[k];
-  });
-  fillSelect("material", state.materials, c.material);
-  fillSelect("door_material", state.materials, c.door_material);
+  NUMS.forEach(function(k){ var el=byId(k); if(el) el.value = c[k]; });
+  BOOLS.forEach(function(k){ var el=byId(k); if(el) el.checked = !!c[k]; });
+  TEXTS.forEach(function(k){ var el=byId(k); if(el) el.value = c[k]||""; });
+  SELS.forEach(function(k){ fillSelect(k, state.materials, c[k]); });
   fillSlides("slide_key", c.slide_key);
+  for (var id in NESTED){
+    var ref=NESTED[id], d=c[ref[0]]||{}, el=byId(id); if(!el) continue;
+    if (el.tagName==="SELECT") fillSelect(id, state.materials, d[ref[1]]);
+    else el.value = d[ref[1]];
+  }
 }
 function readCfgFromForm(){
   var c = state.cfg;
-  ["W","H","D","t","toe_kick_height"].forEach(function(k){
-    var el=document.getElementById(k); if (el) c[k] = parseFloat(el.value)||0;
-  });
-  ["with_back","with_toe_kick","with_hinges","insert_real_hardware"].forEach(function(k){
-    var el=document.getElementById(k); if (el) c[k] = el.checked;
-  });
-  c.material = document.getElementById("material").value;
-  c.door_material = document.getElementById("door_material").value;
-  c.slide_key = document.getElementById("slide_key").value;
+  NUMS.forEach(function(k){ var el=byId(k); if(el) c[k] = parseFloat(el.value)||0; });
+  BOOLS.forEach(function(k){ var el=byId(k); if(el) c[k] = el.checked; });
+  TEXTS.forEach(function(k){ var el=byId(k); if(el) c[k] = el.value; });
+  SELS.forEach(function(k){ var el=byId(k); if(el) c[k] = el.value; });
+  var sk=byId("slide_key"); if(sk) c.slide_key = sk.value;
+  for (var id in NESTED){
+    var ref=NESTED[id], el=byId(id); if(!el) continue;
+    if (!c[ref[0]]) c[ref[0]] = {};
+    c[ref[0]][ref[1]] = NESTED_NUM[id] ? (parseFloat(el.value)||0) : el.value;
+  }
 }
 
-/* ---- small DOM helpers ---- */
-function setDisabled(id,d){ var el=document.getElementById(id); if(el) el.disabled=!!d; }
-function show(id,v){ var el=document.getElementById(id); if(el) el.style.display = v?"flex":"none"; }
+/* ---- small DOM helpers ------------------------------------------------------ */
+function byId(id){ return document.getElementById(id); }
+function setDisabled(id,d){ var el=byId(id); if(el) el.disabled=!!d; }
+function show(id,v){ var el=byId(id); if(el) el.style.display = v?"flex":"none"; }
 function fillSelect(id, items, cur){
-  var el=document.getElementById(id); if(!el) return;
+  var el=byId(id); if(!el) return;
   el.innerHTML = items.map(function(x){
-    return '<option'+(x===cur?' selected':'')+'>'+x+'</option>'; }).join("");
+    return '<option'+(x===cur?' selected':'')+'>'+esc(x)+'</option>'; }).join("");
 }
 function fillSlides(id, cur){
-  var el=document.getElementById(id); if(!el) return;
+  var el=byId(id); if(!el) return;
   el.innerHTML = state.slides.map(function(s){
-    return '<option value="'+s.key+'"'+(s.key===cur?' selected':'')+'>'+s.desc+'</option>';
+    return '<option value="'+esc(s.key)+'"'+(s.key===cur?' selected':'')+'>'+esc(s.desc)+'</option>';
   }).join("");
 }
 function fillTargets(){
-  var el=document.getElementById("target");
-  var opts = '<option value="new">+ Novo armario</option>';
+  var el=byId("target");
+  var opts = '<option value="new">+ Novo armário</option>';
   state.cabinets.forEach(function(cb){
-    opts += '<option value="'+cb.id+'"'+(cb.id===state.target?' selected':'')+'>'+cb.name+'</option>';
+    opts += '<option value="'+esc(cb.id)+'"'+(cb.id===state.target?' selected':'')+'>'+esc(cb.name)+'</option>';
   });
-  el.innerHTML = opts;
-  el.value = state.target;
+  el.innerHTML = opts; el.value = state.target;
 }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(m){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]; }); }
 function setStatus(msg, cls){
-  var el=document.getElementById("status");
-  el.textContent = msg || ""; el.className = cls||"";
+  var el=byId("status"); el.className = cls||"";
+  byId("statusMsg").textContent = msg || "";
 }
 
-/* ---- validation (debounced) ---- */
+/* ---- validation (debounced) ------------------------------------------------- */
 var vTimer=null;
 function validateNow(){
   clearTimeout(vTimer);
   vTimer = setTimeout(function(){
     readCfgFromForm();
+    if (state.demo){ setStatus("Modo demonstração — a validação roda no Fusion.", "warn"); return; }
     send("validate", {cfg:state.cfg}).then(function(r){
       if (!r) return;
-      if (r.ok) setStatus("OK - pronto para gerar.", "ok");
-      else setStatus(r.error||"Configuracao invalida.", "err");
+      if (r.ok) setStatus("Pronto para gerar.", "ok");
+      else setStatus(r.error||"Configuração inválida.", "err");
     });
-  }, 200);
+  }, 220);
 }
 
-/* ---- wire up ---- */
+/* ============================================================================
+   WIZARD
+============================================================================ */
+var WIZ = { step:0, choicePreset:null, choiceInterior:null };
+var WIZ_STEPS = 4;
+
+var PRESETS = {
+  base:   { name:"Balcão (base)",       W:800, H:850,  D:560, toe:true,  d:"Bancada de cozinha, apoio no chão." },
+  wall:   { name:"Aéreo",               W:800, H:700,  D:350, toe:false, d:"Fixado na parede, acima da bancada." },
+  tall:   { name:"Torre / Despenseiro", W:600, H:2100, D:600, toe:true,  d:"Coluna alta, do chão ao teto." },
+  custom: { name:"Personalizado",       W:null,H:null, D:null, toe:null, d:"Começar do zero com as medidas atuais." }
+};
+
+function presetSVG(kind){
+  // small illustrative silhouette per preset
+  if (kind==="base")  return '<svg viewBox="0 0 120 70"><rect x="18" y="14" width="84" height="42" rx="2" fill="#3f6b4a" stroke="#6cc04a" stroke-width="1.5"/><path d="M60 14v42" stroke="#6cc04a" stroke-width="1.5"/><rect x="22" y="58" width="76" height="6" fill="#555"/></svg>';
+  if (kind==="wall")  return '<svg viewBox="0 0 120 70"><rect x="24" y="8" width="72" height="36" rx="2" fill="#2f5d78" stroke="#29b6e8" stroke-width="1.5"/><path d="M60 8v36" stroke="#29b6e8" stroke-width="1.5"/></svg>';
+  if (kind==="tall")  return '<svg viewBox="0 0 120 70"><rect x="42" y="4" width="36" height="60" rx="2" fill="#8a5a24" stroke="#e6a23c" stroke-width="1.5"/><path d="M42 24h36M42 40h36" stroke="#e6a23c" stroke-width="1.2"/></svg>';
+  return '<svg viewBox="0 0 120 70"><rect x="24" y="10" width="72" height="48" rx="2" fill="#454545" stroke="#9a9a9a" stroke-width="1.5" stroke-dasharray="4 3"/><text x="60" y="38" text-anchor="middle" fill="#9a9a9a" font-size="10">?</text></svg>';
+}
+
+var INTERIORS = {
+  doors2:    { name:"2 portas",              d:"Duas portas de abrir.",            build:function(){ return leafNode("doors",2); } },
+  doorShelf: { name:"Portas + prateleiras",  d:"Portas com prateleiras dentro.",   build:function(){ var n=leafNode("doors",2); n.shelves_behind=3; return n; } },
+  drawers3:  { name:"3 gavetas",             d:"Coluna de gavetas.",               build:function(){ return leafNode("drawers",3); } },
+  shelves:   { name:"Prateleiras abertas",   d:"Sem portas, só prateleiras.",      build:function(){ return leafNode("shelves",3); } },
+  combo:     { name:"Portas + nicho aberto", d:"Portas embaixo, nicho em cima.",   build:function(){
+                 return { split:"v", children:[
+                   { size:2, fixed:false, node:leafNode("doors",2) },   // bottom
+                   { size:1, fixed:false, node:leafNode("shelves",2) } ]}; } },
+  drawersDoors:{ name:"Gavetas + porta",     d:"Gavetas embaixo, porta em cima.",  build:function(){
+                 return { split:"v", children:[
+                   { size:1, fixed:false, node:leafNode("drawers",3) },
+                   { size:1, fixed:false, node:leafNode("doors",1) } ]}; } }
+};
+function leafNode(type,count){ var n=newLeaf(type); n.count=count; return n; }
+
+function interiorSVG(kind){
+  var g = { doors2:'<rect x="8" y="6" width="104" height="58" fill="none" stroke="#2f6b4a" stroke-width="2"/><path d="M60 6v58" stroke="#2f6b4a" stroke-width="2"/><circle cx="54" cy="35" r="2.5" fill="#2f6b4a"/><circle cx="66" cy="35" r="2.5" fill="#2f6b4a"/>',
+    doorShelf:'<rect x="8" y="6" width="104" height="58" fill="none" stroke="#2f6b4a" stroke-width="2"/><path d="M60 6v58M14 24h92M14 44h92" stroke="#2f6b4a" stroke-width="1.4"/>',
+    drawers3:'<rect x="8" y="6" width="104" height="58" fill="none" stroke="#8a5a24" stroke-width="2"/><path d="M8 25h104M8 44h104" stroke="#8a5a24" stroke-width="1.6"/><path d="M50 15h20M50 34h20M50 54h20" stroke="#8a5a24" stroke-width="2"/>',
+    shelves:'<rect x="8" y="6" width="104" height="58" fill="none" stroke="#2f5d78" stroke-width="2"/><path d="M8 22h104M8 35h104M8 48h104" stroke="#2f5d78" stroke-width="1.6"/>',
+    combo:'<rect x="8" y="6" width="104" height="58" fill="none" stroke="#9a9a9a" stroke-width="1.5"/><path d="M8 24h104" stroke="#9a9a9a"/><path d="M60 24v40" stroke="#2f6b4a" stroke-width="2"/><path d="M14 13h92" stroke="#2f5d78" stroke-width="1.4"/>',
+    drawersDoors:'<rect x="8" y="6" width="104" height="58" fill="none" stroke="#9a9a9a" stroke-width="1.5"/><path d="M8 30h104" stroke="#9a9a9a"/><path d="M8 42h104M8 54h104" stroke="#8a5a24" stroke-width="1.5"/>'
+  }[kind]||"";
+  return '<svg viewBox="0 0 120 70">'+g+'</svg>';
+}
+
+function openWizard(){
+  WIZ.step = 0; WIZ.choicePreset = null; WIZ.choiceInterior = null;
+  byId("wizard").classList.add("show");
+  renderWizard();
+}
+function closeWizard(){ byId("wizard").classList.remove("show"); render(); }
+
+function renderWizard(){
+  var stepsEl = byId("wizSteps"); stepsEl.innerHTML = "";
+  for (var i=0;i<WIZ_STEPS;i++){
+    var cls = i<WIZ.step ? "done" : (i===WIZ.step ? "cur":"");
+    stepsEl.innerHTML += '<span class="s '+cls+'"></span>';
+  }
+  var body = byId("wizBody"), title = byId("wizTitle");
+  var back = byId("wizBack"), next = byId("wizNext");
+  back.style.visibility = WIZ.step===0 ? "hidden":"visible";
+
+  if (WIZ.step===0){
+    title.textContent = "Que tipo de móvel?";
+    body.innerHTML = '<p class="steplead">Escolha um ponto de partida. Você pode mudar tudo depois.</p>'+
+      '<div class="choices">'+ Object.keys(PRESETS).map(function(k){
+        var p=PRESETS[k];
+        return '<button class="choice'+(WIZ.choicePreset===k?" on":"")+'" data-preset="'+k+'">'+
+          presetSVG(k)+'<span class="cn">'+p.name+'</span><span class="cd">'+p.d+'</span></button>';
+      }).join("")+'</div>';
+    body.querySelectorAll("[data-preset]").forEach(function(b){
+      b.addEventListener("click", function(){ pickPreset(this.getAttribute("data-preset")); });
+    });
+    next.disabled = !WIZ.choicePreset;
+  }
+  else if (WIZ.step===1){
+    title.textContent = "Medidas";
+    var c = state.cfg;
+    body.innerHTML =
+      '<p class="steplead">Confira as medidas externas. A altura inclui o rodapé.</p>'+
+      '<div class="diagram"><svg viewBox="-24 0 286 210" id="wizDiagram"></svg></div>'+
+      wizRow("wW","Largura (L)","mm",c.W)+ wizRow("wH","Altura (A)","mm",c.H)+
+      wizRow("wD","Profundidade (P)","mm",c.D)+
+      '<div class="row"><label>Material</label><select id="wMat" class="grow"></select></div>'+
+      wizRow("wT","Espessura","mm",c.t);
+    fillSelect("wMat", state.materials, c.material);
+    // mirror the main diagram into the wizard
+    var main = byId("dimDiagram"); if (main) byId("wizDiagram").innerHTML = main.innerHTML;
+    ["wW","wH","wD","wT"].forEach(function(id){
+      byId(id).addEventListener("input", wizReadMeasures);
+    });
+    byId("wMat").addEventListener("change", wizReadMeasures);
+    next.disabled = false;
+  }
+  else if (WIZ.step===2){
+    title.textContent = "O que vai dentro?";
+    body.innerHTML = '<p class="steplead">Escolha uma organização pronta. No editor você pode ' +
+      'refinar região por região.</p><div class="choices">'+ Object.keys(INTERIORS).map(function(k){
+        var it=INTERIORS[k];
+        return '<button class="choice'+(WIZ.choiceInterior===k?" on":"")+'" data-int="'+k+'">'+
+          interiorSVG(k)+'<span class="cn">'+it.name+'</span><span class="cd">'+it.d+'</span></button>';
+      }).join("")+'</div>';
+    body.querySelectorAll("[data-int]").forEach(function(b){
+      b.addEventListener("click", function(){
+        WIZ.choiceInterior = this.getAttribute("data-int"); renderWizard(); });
+    });
+    next.disabled = !WIZ.choiceInterior;
+  }
+  else if (WIZ.step===3){
+    title.textContent = "Revisão";
+    // commit interior choice into the cfg so the review + build reflect it
+    if (WIZ.choiceInterior){ state.cfg.layout = INTERIORS[WIZ.choiceInterior].build(); }
+    var c = state.cfg, it = WIZ.choiceInterior?INTERIORS[WIZ.choiceInterior].name:"—";
+    body.innerHTML =
+      '<p class="steplead">Tudo certo? Gere o armário ou vá para o editor para ajustes finos.</p>'+
+      '<div class="review">'+
+        rrow("Tipo", WIZ.choicePreset?PRESETS[WIZ.choicePreset].name:"—")+
+        rrow("Medidas", fmt(c.W)+" × "+fmt(c.H)+" × "+fmt(c.D)+" mm (L×A×P)")+
+        rrow("Material", esc(c.material)+"  ·  "+fmt(c.t)+" mm")+
+        rrow("Fundo", c.with_back?"Sim":"Não")+
+        rrow("Rodapé", c.with_toe_kick?(fmt(c.toe_kick_height)+" mm"):"Não")+
+        rrow("Interior", esc(it))+
+      '</div>'+
+      '<div class="btns" style="margin-top:14px;">'+
+        '<button class="btn ghost" id="wizToEditor">Ajustar em detalhe</button></div>';
+    byId("wizToEditor").addEventListener("click", closeWizard);
+    next.textContent = "Gerar armário";
+    next.disabled = false;
+    return;
+  }
+  next.textContent = "Continuar";
+}
+function wizRow(id,label,unit,val){
+  return '<div class="row"><label>'+label+'</label><div class="field">'+
+    '<input type="number" id="'+id+'" step="10" value="'+val+'"><span class="unit">'+unit+'</span></div></div>';
+}
+function rrow(k,v){ return '<div class="rrow"><span class="rk">'+k+'</span><span class="rv">'+v+'</span></div>'; }
+
+function pickPreset(k){
+  WIZ.choicePreset = k;
+  var p = PRESETS[k];
+  if (p.W!=null){ state.cfg.W=p.W; state.cfg.H=p.H; state.cfg.D=p.D; state.cfg.with_toe_kick=p.toe; }
+  renderWizard();
+}
+function wizReadMeasures(){
+  var c = state.cfg;
+  c.W = parseFloat(byId("wW").value)||c.W;
+  c.H = parseFloat(byId("wH").value)||c.H;
+  c.D = parseFloat(byId("wD").value)||c.D;
+  c.t = parseFloat(byId("wT").value)||c.t;
+  var m = byId("wMat"); if (m) c.material = m.value;
+  renderDiagram();
+  var main = byId("dimDiagram"), wd = byId("wizDiagram");
+  if (main && wd) wd.innerHTML = main.innerHTML;
+}
+function wizAdvance(){
+  if (WIZ.step < WIZ_STEPS-1){ WIZ.step++; renderWizard(); return; }
+  // final step: build
+  closeWizard();
+  doApply();
+}
+
+/* ============================================================================
+   WIRING
+============================================================================ */
 function bindForm(){
-  ["W","H","D","t","toe_kick_height","material","door_material","slide_key",
-   "with_back","with_toe_kick","with_hinges","insert_real_hardware"].forEach(function(k){
-    var el=document.getElementById(k);
+  // dimensions + structure + fronts + advanced -> re-read & re-render
+  var all = NUMS.concat(BOOLS, SELS, TEXTS, ["slide_key"], Object.keys(NESTED));
+  all.forEach(function(k){
+    var el=byId(k);
     if (el) el.addEventListener("change", function(){ readCfgFromForm(); render(); });
   });
-  document.getElementById("leafType").addEventListener("change", function(){
-    var n=getNode(state.sel); n.type=this.value;
-    if (n.type!=="open" && !n.count) n.count=(n.type==="shelves"?3:2);
-    render();
+  // live highlight of the diagram while editing a dimension
+  ["W","H","D","t"].forEach(function(k){
+    var el=byId(k); if(!el) return;
+    el.addEventListener("focus", function(){ highlightDim(k,true); });
+    el.addEventListener("blur",  function(){ highlightDim(k,false); });
+    el.addEventListener("input", function(){ readCfgFromForm(); renderDiagram(); highlightDim(k,true); });
   });
-  document.getElementById("leafCount").addEventListener("change", function(){
-    var n=getNode(state.sel); n.count=Math.max(1, parseInt(this.value)||1); render();
-  });
-  document.getElementById("leafInset").addEventListener("change", function(){
-    getNode(state.sel).inset=this.checked; render();
-  });
-  document.getElementById("leafSize").addEventListener("change", function(){
-    var w=getWrapper(state.sel); if(w){ w.size=Math.max(0.001, parseFloat(this.value)||1); render(); }
-  });
-  document.getElementById("leafFixed").addEventListener("change", function(){
-    var w=getWrapper(state.sel); if(w){ w.fixed=this.checked; render(); }
-  });
-  document.getElementById("splitV").addEventListener("click", function(){
-    if (state.sel!==null){ splitLeaf(state.sel, "v"); render(); } });
-  document.getElementById("splitH").addEventListener("click", function(){
-    if (state.sel!==null){ splitLeaf(state.sel, "h"); render(); } });
-  document.getElementById("del").addEventListener("click", function(){
-    if (state.sel){ deleteRegion(state.sel); render(); } });
 
-  document.getElementById("target").addEventListener("change", function(){
+  // region type tiles
+  document.querySelectorAll("#typeTiles .tile").forEach(function(t){
+    t.addEventListener("click", function(){
+      if (this.disabled || state.sel===null) return;
+      var n=getNode(state.sel); if(isSplit(n)) return;
+      n.type=this.getAttribute("data-type");
+      if (n.type!=="open" && !n.count) n.count=(n.type==="shelves"?3:2);
+      render();
+    });
+  });
+
+  // count stepper
+  byId("countUp").addEventListener("click", function(){ bumpCount(1); });
+  byId("countDown").addEventListener("click", function(){ bumpCount(-1); });
+  byId("leafCount").addEventListener("change", function(){
+    var n=getNode(state.sel); n.count=Math.max(1, parseInt(this.value)||1); render(); });
+  byId("sbUp").addEventListener("click", function(){ bumpSB(1); });
+  byId("sbDown").addEventListener("click", function(){ bumpSB(-1); });
+  byId("leafShelvesBehind").addEventListener("change", function(){
+    var n=getNode(state.sel); n.shelves_behind=Math.max(0, parseInt(this.value)||0); render(); });
+
+  byId("leafInset").addEventListener("change", function(){ getNode(state.sel).inset=this.checked; render(); });
+  byId("leafAlign").addEventListener("change", function(){ getNode(state.sel).shelf_align_front=this.checked; render(); });
+  byId("leafSize").addEventListener("change", function(){
+    var w=getWrapper(state.sel); if(w){ w.size=Math.max(0.001, parseFloat(this.value)||1); render(); } });
+  byId("leafFixed").addEventListener("change", function(){
+    var w=getWrapper(state.sel); if(w){ w.fixed=this.checked; render(); } });
+
+  byId("splitV").addEventListener("click", function(){ if(state.sel!==null){ splitLeaf(state.sel,"v"); render(); } });
+  byId("splitH").addEventListener("click", function(){ if(state.sel!==null){ splitLeaf(state.sel,"h"); render(); } });
+  byId("del").addEventListener("click", function(){ if(state.sel){ deleteRegion(state.sel); render(); } });
+
+  // section accordions
+  document.querySelectorAll(".shead[data-toggle]").forEach(function(h){
+    h.addEventListener("click", function(){
+      byId(this.getAttribute("data-toggle")).classList.toggle("open"); });
+  });
+
+  // target selector
+  byId("target").addEventListener("change", function(){
     var id=this.value; state.target=id;
+    if (state.demo){ return; }
     send("selectTarget",{id:id}).then(function(r){
       if (r && r.cfg){ state.cfg=r.cfg; state.sel=null; render(); }
     });
   });
-  document.getElementById("reload").addEventListener("click", init);
-  document.getElementById("apply").addEventListener("click", function(){
-    readCfgFromForm();
-    setStatus("Gerando...", "");
-    send("apply", {id:state.target, cfg:state.cfg}).then(function(r){
-      if (!r){ setStatus("Sem conexao com o Fusion.", "err"); return; }
-      if (!r.ok){ setStatus(r.error||"Falha ao gerar.", "err"); return; }
-      state.cabinets = r.cabinets||state.cabinets;
-      if (r.id) state.target = r.id;
-      fillTargets();
-      var w = (r.warnings&&r.warnings.length) ? " ("+r.warnings.length+" aviso(s))" : "";
-      setStatus("Armario gerado."+w, "ok");
-    });
+
+  byId("reload").addEventListener("click", function(){ init(0); });
+  byId("apply").addEventListener("click", doApply);
+
+  // wizard
+  byId("openWizard").addEventListener("click", openWizard);
+  byId("wizCancel").addEventListener("click", closeWizard);
+  byId("wizBack").addEventListener("click", function(){ if(WIZ.step>0){ WIZ.step--; renderWizard(); } });
+  byId("wizNext").addEventListener("click", wizAdvance);
+}
+function bumpCount(d){
+  var n=getNode(state.sel); if(!n||isSplit(n)||n.type==="open") return;
+  n.count=Math.max(1,(n.count||1)+d); render();
+}
+function bumpSB(d){
+  var n=getNode(state.sel); if(!n||isSplit(n)||n.type!=="doors") return;
+  n.shelves_behind=Math.max(0,(n.shelves_behind||0)+d); render();
+}
+
+function doApply(){
+  readCfgFromForm();
+  if (state.demo){
+    setStatus("Modo demonstração — conecte pelo comando Cabinet Layout no Fusion para gerar.", "warn");
+    return;
+  }
+  setStatus("Gerando…", "");
+  send("apply", {id:state.target, cfg:state.cfg}).then(function(r){
+    if (!r){ setStatus("Sem conexão com o Fusion.", "err"); return; }
+    if (r.__err){ setStatus("Erro na ponte JS: "+r.__err, "err"); return; }
+    if (!r.ok){ setStatus(r.error||"Falha ao gerar.", "err"); return; }
+    state.cabinets = r.cabinets||state.cabinets;
+    if (r.id) state.target = r.id;
+    fillTargets();
+    var w = (r.warnings&&r.warnings.length) ? " ("+r.warnings.length+" aviso(s))" : "";
+    setStatus("Armário gerado."+w, "ok");
   });
+}
+
+/* ---- a JS default cfg for demo/browser mode (mirrors normalized DEFAULT_CFG) - */
+function demoCfg(){
+  return {
+    W:800,H:2100,D:400,t:18, n_shelves:3, material:"MDF 18mm Branco", shelf_align_front:false,
+    with_back:true, back_material:"MDF 6mm Cru", back_t:6, dado_depth:8, back_setback:10,
+    with_toe_kick:true, toe_kick_material:"MDF 18mm Branco", toe_kick_t:18, toe_kick_height:100,
+    toe_kick_setback:75, toe_kick_max_span:500,
+    with_doors:false, door_material:"MDF 18mm Branco", door_t:18, n_doors:2, door_gap:3,
+    door_inset:false, door_band:"Fita PVC 1mm Branco", with_hinges:true,
+    hinge:{cup_diameter:35,cup_depth:12,cup_edge:22.5,end_inset:100,screw_diameter:5,
+           screw_depth:12,plate_front:37,screw_pitch:32,shelf_clearance:30},
+    with_drawers:false, n_drawers:3, drawer_inset:false, drawer_gap:3,
+    slide_key:"hafele_matrix_invisa_a30_300", insert_real_hardware:false,
+    drawer:{box_material:"MDF 16mm Branco",box_t:16,bottom_material:"MDF 6mm Cru",bottom_t:6,
+            bottom_dado_depth:6,bottom_up:12,bottom_play:0.4,box_height:150,box_top_gap:30,
+            face_material:"MDF 18mm Branco",face_t:18,face_band:"Fita PVC 1mm Branco",
+            back_height_reduction:0},
+    tol:{dado_bottom_clearance:0.5,dado_side_clearance:0.2,shelf_back_gap:1,
+         shelf_front_setback:30,shelf_door_clearance:2},
+    layout:{type:"shelves",count:3,inset:false,gap:null,shelf_align_front:null,
+            slide_key:null,shelves_behind:0}
+  };
+}
+function enterDemo(){
+  state.demo = true;
+  state.materials = ["MDF 18mm Branco","MDF 15mm Branco","MDF 16mm Branco","MDF 6mm Cru","MDP 18mm Branco"];
+  state.slides = [{key:"hafele_matrix_invisa_a30_300",
+                   desc:"Corrediça oculta Häfele Matrix Invisa A30 GT2 300mm"}];
+  state.cabinets = []; state.cfg = demoCfg(); state.target="new"; state.sel=null;
+  byId("demoBanner").classList.add("show");
+  fillTargets(); render();
+  setStatus("Modo demonstração. Abra pelo comando Cabinet Layout no Fusion para gerar.", "warn");
 }
 
 function init(tries){
   tries = tries || 0;
   send("init", {}).then(function(r){
-    if (!r){                                   // adsk bridge not ready yet — retry
-      if (tries < 20){ setTimeout(function(){ init(tries+1); }, 250); return; }
-      setStatus("Sem conexao com o Fusion (adsk indisponivel). Abra este painel "
-                + "pelo comando Cabinet Layout dentro do Fusion 360.", "err");
-      return;
+    if (!r){                                   // adsk bridge not ready yet — retry, then demo
+      if (tries < 16){ setTimeout(function(){ init(tries+1); }, 250); return; }
+      enterDemo(); return;
     }
     if (r.__err){ setStatus("Erro na ponte JS: " + r.__err, "err"); return; }
-    if (r.__raw){ setStatus("Resposta invalida do add-in: " + r.__raw.slice(0,300), "err"); return; }
-    if (!r.cfg){ setStatus(r.error || "O add-in nao retornou uma configuracao.", "err"); return; }
+    if (r.__raw){ setStatus("Resposta inválida do add-in: " + r.__raw.slice(0,300), "err"); return; }
+    if (!r.cfg){ setStatus(r.error || "O add-in não retornou uma configuração.", "err"); return; }
+    state.demo = false; byId("demoBanner").classList.remove("show");
     state.materials = r.materials || [];
     state.slides = r.slides || [];
     state.cabinets = r.cabinets || [];
-    state.cfg = r.cfg;
-    state.target = "new";
-    state.sel = null;
-    fillTargets();
-    render();
+    state.cfg = r.cfg; state.target = "new"; state.sel = null;
+    fillTargets(); render();
     setStatus("Pronto. Edite o layout e clique Aplicar.", "ok");
   });
 }
