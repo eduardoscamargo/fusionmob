@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FusionMob - Layout</title>
+<style>
+  :root { --bg:#f4f4f4; --panel:#fff; --line:#c9c9c9; --ink:#222; --muted:#666;
+          --accent:#0a7; --sel:#0a84ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:13px/1.4 "Segoe UI",Arial,sans-serif; color:var(--ink);
+         background:var(--bg); }
+  h3 { margin:14px 8px 4px; font-size:12px; text-transform:uppercase;
+       letter-spacing:.04em; color:var(--muted); }
+  .wrap { padding:8px; }
+  .row { display:flex; align-items:center; gap:6px; margin:4px 0; }
+  .row label { flex:0 0 128px; color:var(--muted); }
+  .row .grow { flex:1 1 auto; }
+  input[type=number], select { width:100%; padding:3px 5px; border:1px solid var(--line);
+       border-radius:4px; background:#fff; }
+  input[type=checkbox] { width:16px; height:16px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:6px;
+          padding:8px; margin:6px 0; }
+  .btns { display:flex; flex-wrap:wrap; gap:6px; }
+  button { padding:5px 9px; border:1px solid var(--line); border-radius:5px;
+           background:#fff; cursor:pointer; font-size:12px; }
+  button:hover { background:#eee; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.primary:hover { filter:brightness(1.07); }
+  button:disabled { opacity:.5; cursor:default; }
+  #canvasWrap { display:flex; justify-content:center; background:#eaeaea;
+                border:1px solid var(--line); border-radius:6px; padding:8px; }
+  svg { max-width:100%; height:auto; max-height:340px; }
+  .leaf { cursor:pointer; }
+  .leaf-label { font-size:11px; fill:#333; pointer-events:none; }
+  #status { min-height:18px; padding:4px 2px; font-size:12px; }
+  .ok { color:var(--accent); }
+  .err { color:#c0392b; }
+  .hint { color:var(--muted); font-size:11px; margin:2px 0 6px; }
+  .pill { display:inline-block; padding:1px 6px; border-radius:10px; font-size:11px;
+          background:#e8e8e8; color:#555; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="status">Conectando ao Fusion...</div>
+
+  <div class="row">
+    <label>Armario</label>
+    <select id="target" class="grow"></select>
+  </div>
+
+  <h3>Carcaca</h3>
+  <div class="card">
+    <div class="row"><label>Largura (W) mm</label><input type="number" id="W" step="1"></div>
+    <div class="row"><label>Altura (H) mm</label><input type="number" id="H" step="1"></div>
+    <div class="row"><label>Profundidade (D) mm</label><input type="number" id="D" step="1"></div>
+    <div class="row"><label>Espessura (t) mm</label><input type="number" id="t" step="1"></div>
+    <div class="row"><label>Material</label><select id="material" class="grow"></select></div>
+    <div class="row"><label>Fundo</label><input type="checkbox" id="with_back"><span class="grow"></span></div>
+    <div class="row"><label>Rodape</label><input type="checkbox" id="with_toe_kick"><span class="grow"></span></div>
+    <div class="row"><label>Altura rodape mm</label><input type="number" id="toe_kick_height" step="1"></div>
+    <div class="row"><label>Furacao dobradica</label><input type="checkbox" id="with_hinges"><span class="grow"></span></div>
+    <div class="row"><label>Material porta</label><select id="door_material" class="grow"></select></div>
+    <div class="row"><label>Corredica</label><select id="slide_key" class="grow"></select></div>
+    <div class="row"><label>Modelo 3D corredica</label><input type="checkbox" id="insert_real_hardware"><span class="grow"></span></div>
+  </div>
+
+  <h3>Interior (regioes)</h3>
+  <p class="hint">Clique numa regiao para selecionar. Divida na horizontal/vertical,
+     mude o tipo, ou remova para juntar com a vizinha.</p>
+  <div id="canvasWrap"><svg id="canvas" viewBox="0 0 100 100"></svg></div>
+
+  <div class="card" id="inspector">
+    <div class="row"><label>Regiao</label><span class="grow"><span class="pill" id="selInfo">nenhuma</span></span></div>
+    <div class="row"><label>Tipo</label>
+      <select id="leafType" class="grow">
+        <option value="open">Vazio</option>
+        <option value="shelves">Prateleiras</option>
+        <option value="doors">Portas</option>
+        <option value="drawers">Gavetas</option>
+      </select>
+    </div>
+    <div class="row" id="rowCount"><label>Quantidade</label><input type="number" id="leafCount" min="1" step="1"></div>
+    <div class="row" id="rowInset"><label>Embutida (inset)</label><input type="checkbox" id="leafInset"><span class="grow"></span></div>
+    <div class="row" id="rowSize">
+      <label>Tamanho</label>
+      <input type="number" id="leafSize" step="1" style="flex:1">
+      <label style="flex:0 0 auto; margin-left:6px;">fixo mm</label>
+      <input type="checkbox" id="leafFixed">
+    </div>
+    <div class="btns" style="margin-top:6px;">
+      <button id="splitV">Dividir horizontal —</button>
+      <button id="splitH">Dividir vertical |</button>
+      <button id="del">Remover regiao</button>
+    </div>
+  </div>
+
+  <div class="btns">
+    <button id="apply" class="primary">Aplicar / Gerar</button>
+    <button id="reload">Recarregar</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+var TYPE_COLOR = { open:"#f7f7f7", shelves:"#dbeafe", doors:"#dcfce7", drawers:"#fde9c8" };
+var TYPE_LABEL = { open:"Vazio", shelves:"Prateleiras", doors:"Portas", drawers:"Gavetas" };
+
+var state = { cfg:null, cabinets:[], materials:[], slides:[], target:"new", sel:null };
+
+function send(action, obj){
+  // Talk to the add-in; resolve with the parsed JSON reply (or a marker object
+  // {__err}/{__raw} so the caller can surface what went wrong).
+  try {
+    if (typeof adsk !== "undefined" && adsk.fusionSendData){
+      var ret = adsk.fusionSendData(action, JSON.stringify(obj||{}));
+      return Promise.resolve(ret).then(function(s){
+        if (s === undefined || s === null || s === "") return null;
+        try { return JSON.parse(s); } catch(e){ return {__raw:String(s)}; }
+      }, function(e){ return {__err:String(e)}; });
+    }
+  } catch(e){ return Promise.resolve({__err:String(e)}); }
+  return Promise.resolve(null);   // adsk bridge not ready / running in a browser
+}
+
+/* ---- layout tree helpers (paths are arrays of child indices) ---- */
+function isSplit(n){ return n && n.split !== undefined; }
+function getNode(path){
+  var n = state.cfg.layout;
+  for (var i=0;i<path.length;i++){ n = n.children[path[i]].node; }
+  return n;
+}
+function getWrapper(path){          // {size,fixed,node} of the child at path, or null for root
+  if (!path.length) return null;
+  var p = getNode(path.slice(0,-1));
+  return p.children[path[path.length-1]];
+}
+function setNode(path, val){
+  if (!path.length){ state.cfg.layout = val; return; }
+  var p = getNode(path.slice(0,-1));
+  p.children[path[path.length-1]].node = val;
+}
+function newLeaf(){ return { type:"open", count:1, inset:false, gap:null,
+                             shelf_align_front:null, slide_key:null, shelves_behind:0 }; }
+function splitLeaf(path, axis){
+  var node = getNode(path);
+  setNode(path, { split:axis, children:[
+    { size:1, fixed:false, node:node },
+    { size:1, fixed:false, node:newLeaf() } ] });
+  state.sel = path.concat([0]);
+}
+function deleteRegion(path){
+  if (!path.length) return;                       // can't remove the whole interior
+  var parentPath = path.slice(0,-1);
+  var parent = getNode(parentPath);
+  parent.children.splice(path[path.length-1], 1);
+  if (parent.children.length === 1){              // collapse a now-single split
+    setNode(parentPath, parent.children[0].node);
+    state.sel = parentPath;
+  } else {
+    state.sel = parentPath.length ? parentPath : null;
+  }
+}
+
+/* ---- geometry: interior rectangle in mm, y downward (0 = top) ---- */
+function interiorDims(){
+  var c = state.cfg, t = c.t;
+  var kick = c.with_toe_kick ? c.toe_kick_height : 0;
+  var Hbox = c.H - kick;
+  return { w:(c.W - 2*t), h:(Hbox - 2*t), t:t };
+}
+function childSizes(children, L, t){
+  var k = children.length, avail = L - (k-1)*t;
+  var fixedSum = 0, flexTotal = 0;
+  children.forEach(function(c){ if (c.fixed) fixedSum += c.size; else flexTotal += c.size; });
+  flexTotal = flexTotal || 1;
+  var leftover = avail - fixedSum;
+  return children.map(function(c){
+    return c.fixed ? c.size : Math.max(0, leftover) * c.size / flexTotal;
+  });
+}
+function collectRects(node, path, x, y, w, h, t, out){
+  if (!isSplit(node)){ out.push({path:path, node:node, x:x, y:y, w:w, h:h}); return; }
+  var axis = node.split, ch = node.children;
+  if (axis === "h"){                               // columns, left -> right
+    var sizes = childSizes(ch, w, t), cx = x;
+    for (var i=0;i<ch.length;i++){
+      collectRects(ch[i].node, path.concat([i]), cx, y, sizes[i], h, t, out);
+      cx += sizes[i];
+      if (i < ch.length-1){ out.push({divider:true, x:cx, y:y, w:t, h:h}); cx += t; }
+    }
+  } else {                                         // rows, first child = BOTTOM
+    var sizesv = childSizes(ch, h, t), cyBottom = y + h;
+    for (var j=0;j<ch.length;j++){
+      var hh = sizesv[j];
+      collectRects(ch[j].node, path.concat([j]), x, cyBottom - hh, w, hh, t, out);
+      cyBottom -= hh;
+      if (j < ch.length-1){ out.push({divider:true, x:x, y:cyBottom - t, w:w, h:t}); cyBottom -= t; }
+    }
+  }
+}
+
+/* ---- rendering ---- */
+function render(){
+  if (!state.cfg) return;          // nothing loaded yet — don't crash
+  syncFormFromCfg();
+  var dim = interiorDims();
+  var svg = document.getElementById("canvas");
+  if (dim.w <= 0 || dim.h <= 0){ svg.innerHTML = ""; return; }
+  svg.setAttribute("viewBox", "0 0 " + dim.w + " " + dim.h);
+  var out = [];
+  collectRects(state.cfg.layout, [], 0, 0, dim.w, dim.h, dim.t, out);
+  var svgns = "http://www.w3.org/2000/svg", parts = "";
+  var selKey = state.sel ? state.sel.join(",") : " ";
+  out.forEach(function(r){
+    if (r.divider){
+      parts += rect(r.x, r.y, r.w, r.h, "#9a9a9a", "none", 0, "");
+      return;
+    }
+    var isSel = r.path.join(",") === selKey;
+    parts += '<g class="leaf" data-path="'+r.path.join(",")+'">';
+    parts += rect(r.x, r.y, r.w, r.h, TYPE_COLOR[r.node.type]||"#fff",
+                  isSel ? "#0a84ff" : "#888", isSel ? Math.max(dim.t,6) : 1.5, "");
+    var cx = r.x + r.w/2, cy = r.y + r.h/2;
+    var lbl = TYPE_LABEL[r.node.type] || "Vazio";
+    if (r.node.type!=="open") lbl += " ("+r.node.count+")";
+    parts += '<text class="leaf-label" x="'+cx+'" y="'+cy+'" text-anchor="middle" '+
+             'dominant-baseline="middle" font-size="'+Math.max(dim.w,dim.h)/28+'">'+lbl+'</text>';
+    parts += '</g>';
+  });
+  svg.innerHTML = parts;
+  Array.prototype.forEach.call(svg.querySelectorAll(".leaf"), function(g){
+    g.addEventListener("click", function(){
+      var p = g.getAttribute("data-path");
+      state.sel = p === "" ? [] : p.split(",").map(Number);
+      renderInspector(); render();
+    });
+  });
+  renderInspector();
+  validateNow();
+}
+function rect(x,y,w,h,fill,stroke,sw,extra){
+  return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" fill="'+fill+
+         '" stroke="'+stroke+'" stroke-width="'+sw+'" '+extra+'/>';
+}
+
+function renderInspector(){
+  var sel = state.sel, has = sel !== null;
+  var node = has ? getNode(sel) : null;
+  var leaf = node && !isSplit(node);
+  document.getElementById("selInfo").textContent =
+    !has ? "interior inteiro" : (leaf ? (TYPE_LABEL[node.type]||"Vazio") : "grupo");
+  setDisabled("leafType", !leaf);
+  setDisabled("leafCount", !leaf || node.type==="open");
+  setDisabled("leafInset", !leaf || !(node.type==="doors"||node.type==="drawers"));
+  var wrap = has ? getWrapper(sel) : null;
+  setDisabled("leafSize", !wrap); setDisabled("leafFixed", !wrap);
+  setDisabled("splitV", !leaf); setDisabled("splitH", !leaf);
+  setDisabled("del", !has || sel.length===0);
+  show("rowCount", leaf && node.type!=="open");
+  show("rowInset", leaf && (node.type==="doors"||node.type==="drawers"));
+  show("rowSize", !!wrap);
+  if (leaf){
+    document.getElementById("leafType").value = node.type;
+    document.getElementById("leafCount").value = node.count||1;
+    document.getElementById("leafInset").checked = !!node.inset;
+  }
+  if (wrap){
+    document.getElementById("leafSize").value = Math.round(wrap.size*10)/10;
+    document.getElementById("leafFixed").checked = !!wrap.fixed;
+  }
+}
+
+/* ---- form <-> cfg ---- */
+function syncFormFromCfg(){
+  var c = state.cfg;
+  ["W","H","D","t","toe_kick_height"].forEach(function(k){
+    var el=document.getElementById(k); if (el) el.value = c[k];
+  });
+  ["with_back","with_toe_kick","with_hinges","insert_real_hardware"].forEach(function(k){
+    var el=document.getElementById(k); if (el) el.checked = !!c[k];
+  });
+  fillSelect("material", state.materials, c.material);
+  fillSelect("door_material", state.materials, c.door_material);
+  fillSlides("slide_key", c.slide_key);
+}
+function readCfgFromForm(){
+  var c = state.cfg;
+  ["W","H","D","t","toe_kick_height"].forEach(function(k){
+    var el=document.getElementById(k); if (el) c[k] = parseFloat(el.value)||0;
+  });
+  ["with_back","with_toe_kick","with_hinges","insert_real_hardware"].forEach(function(k){
+    var el=document.getElementById(k); if (el) c[k] = el.checked;
+  });
+  c.material = document.getElementById("material").value;
+  c.door_material = document.getElementById("door_material").value;
+  c.slide_key = document.getElementById("slide_key").value;
+}
+
+/* ---- small DOM helpers ---- */
+function setDisabled(id,d){ var el=document.getElementById(id); if(el) el.disabled=!!d; }
+function show(id,v){ var el=document.getElementById(id); if(el) el.style.display = v?"flex":"none"; }
+function fillSelect(id, items, cur){
+  var el=document.getElementById(id); if(!el) return;
+  el.innerHTML = items.map(function(x){
+    return '<option'+(x===cur?' selected':'')+'>'+x+'</option>'; }).join("");
+}
+function fillSlides(id, cur){
+  var el=document.getElementById(id); if(!el) return;
+  el.innerHTML = state.slides.map(function(s){
+    return '<option value="'+s.key+'"'+(s.key===cur?' selected':'')+'>'+s.desc+'</option>';
+  }).join("");
+}
+function fillTargets(){
+  var el=document.getElementById("target");
+  var opts = '<option value="new">+ Novo armario</option>';
+  state.cabinets.forEach(function(cb){
+    opts += '<option value="'+cb.id+'"'+(cb.id===state.target?' selected':'')+'>'+cb.name+'</option>';
+  });
+  el.innerHTML = opts;
+  el.value = state.target;
+}
+function setStatus(msg, cls){
+  var el=document.getElementById("status");
+  el.textContent = msg || ""; el.className = cls||"";
+}
+
+/* ---- validation (debounced) ---- */
+var vTimer=null;
+function validateNow(){
+  clearTimeout(vTimer);
+  vTimer = setTimeout(function(){
+    readCfgFromForm();
+    send("validate", {cfg:state.cfg}).then(function(r){
+      if (!r) return;
+      if (r.ok) setStatus("OK - pronto para gerar.", "ok");
+      else setStatus(r.error||"Configuracao invalida.", "err");
+    });
+  }, 200);
+}
+
+/* ---- wire up ---- */
+function bindForm(){
+  ["W","H","D","t","toe_kick_height","material","door_material","slide_key",
+   "with_back","with_toe_kick","with_hinges","insert_real_hardware"].forEach(function(k){
+    var el=document.getElementById(k);
+    if (el) el.addEventListener("change", function(){ readCfgFromForm(); render(); });
+  });
+  document.getElementById("leafType").addEventListener("change", function(){
+    var n=getNode(state.sel); n.type=this.value;
+    if (n.type!=="open" && !n.count) n.count=(n.type==="shelves"?3:2);
+    render();
+  });
+  document.getElementById("leafCount").addEventListener("change", function(){
+    var n=getNode(state.sel); n.count=Math.max(1, parseInt(this.value)||1); render();
+  });
+  document.getElementById("leafInset").addEventListener("change", function(){
+    getNode(state.sel).inset=this.checked; render();
+  });
+  document.getElementById("leafSize").addEventListener("change", function(){
+    var w=getWrapper(state.sel); if(w){ w.size=Math.max(0.001, parseFloat(this.value)||1); render(); }
+  });
+  document.getElementById("leafFixed").addEventListener("change", function(){
+    var w=getWrapper(state.sel); if(w){ w.fixed=this.checked; render(); }
+  });
+  document.getElementById("splitV").addEventListener("click", function(){
+    if (state.sel!==null){ splitLeaf(state.sel, "v"); render(); } });
+  document.getElementById("splitH").addEventListener("click", function(){
+    if (state.sel!==null){ splitLeaf(state.sel, "h"); render(); } });
+  document.getElementById("del").addEventListener("click", function(){
+    if (state.sel){ deleteRegion(state.sel); render(); } });
+
+  document.getElementById("target").addEventListener("change", function(){
+    var id=this.value; state.target=id;
+    send("selectTarget",{id:id}).then(function(r){
+      if (r && r.cfg){ state.cfg=r.cfg; state.sel=null; render(); }
+    });
+  });
+  document.getElementById("reload").addEventListener("click", init);
+  document.getElementById("apply").addEventListener("click", function(){
+    readCfgFromForm();
+    setStatus("Gerando...", "");
+    send("apply", {id:state.target, cfg:state.cfg}).then(function(r){
+      if (!r){ setStatus("Sem conexao com o Fusion.", "err"); return; }
+      if (!r.ok){ setStatus(r.error||"Falha ao gerar.", "err"); return; }
+      state.cabinets = r.cabinets||state.cabinets;
+      if (r.id) state.target = r.id;
+      fillTargets();
+      var w = (r.warnings&&r.warnings.length) ? " ("+r.warnings.length+" aviso(s))" : "";
+      setStatus("Armario gerado."+w, "ok");
+    });
+  });
+}
+
+function init(tries){
+  tries = tries || 0;
+  send("init", {}).then(function(r){
+    if (!r){                                   // adsk bridge not ready yet — retry
+      if (tries < 20){ setTimeout(function(){ init(tries+1); }, 250); return; }
+      setStatus("Sem conexao com o Fusion (adsk indisponivel). Abra este painel "
+                + "pelo comando Cabinet Layout dentro do Fusion 360.", "err");
+      return;
+    }
+    if (r.__err){ setStatus("Erro na ponte JS: " + r.__err, "err"); return; }
+    if (r.__raw){ setStatus("Resposta invalida do add-in: " + r.__raw.slice(0,300), "err"); return; }
+    if (!r.cfg){ setStatus(r.error || "O add-in nao retornou uma configuracao.", "err"); return; }
+    state.materials = r.materials || [];
+    state.slides = r.slides || [];
+    state.cabinets = r.cabinets || [];
+    state.cfg = r.cfg;
+    state.target = "new";
+    state.sel = null;
+    fillTargets();
+    render();
+    setStatus("Pronto. Edite o layout e clique Aplicar.", "ok");
+  });
+}
+
+document.addEventListener("DOMContentLoaded", function(){ bindForm(); init(0); });
+</script>
+</body>
+</html>

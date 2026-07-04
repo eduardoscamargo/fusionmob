@@ -1,2 +1,31 @@
 ﻿Quantidade;Comprimento;Largura;Funcao;Fita C1;Fita C2;Fita L1;Fita L2;Material;Complemento;Girar
-1;2100.0;800.0;Lateral;Fita PVC 1mm Branco;Fita PVC 1mm Branco;;;MDF 18mm Branco;Lateral Esquerda;Sim
+1;770;400;Base;;;;;MDF 15mm Branco;Base;Sim
+1;770;400;Tampo;;;;;MDF 15mm Branco;Tampo;Sim
+1;1985.0;785.0;Fundo;;;;;MDF 6mm Cru;Fundo;Sim
+1;800;100;Rodape;;;;;MDF 18mm Branco;Rodape Frente;Sim
+1;800;100;Travessa;;;;;MDF 18mm Branco;Rodape Traseira;Sim
+1;289.0;100;Travessa;;;;;MDF 18mm Branco;Rodape Lateral E;Sim
+1;289.0;100;Travessa;;;;;MDF 18mm Branco;Rodape Lateral D;Sim
+1;289.0;100;Travessa;;;;;MDF 18mm Branco;Rodape Reforco 1;Sim
+1;300.0;115.9;Lateral;;;;;MDF 16mm Branco;R.1 Gaveta 1 Lateral E;Sim
+1;300.0;115.9;Lateral;;;;;MDF 16mm Branco;R.1 Gaveta 1 Lateral D;Sim
+1;728.0;115.9;Travessa;;;;;MDF 16mm Branco;R.1 Gaveta 1 Frente Caixa;Sim
+1;728.0;115.9;Travessa;;;;;MDF 16mm Branco;R.1 Gaveta 1 Fundo Caixa;Sim
+1;740.0;280.0;Fundo;;;;;MDF 6mm Cru;R.1 Gaveta 1 Fundo;Sim
+1;764.0;158.9;Porta;Fita PVC 1mm Branco;Fita PVC 1mm Branco;Fita PVC 1mm Branco;Fita PVC 1mm Branco;MDF 18mm Branco;R.1 Gaveta 1 Frente (corredica Corredica oculta Hafele Matrix Invisa A30 GT2 300mm (ext. total, push), par 300mm);Nao
+1;300.0;115.9;Lateral;;;;;MDF 16mm Branco;R.1 Gaveta 2 Lateral E;Sim
+1;300.0;115.9;Lateral;;;;;MDF 16mm Branco;R.1 Gaveta 2 Lateral D;Sim
+1;728.0;115.9;Travessa;;;;;MDF 16mm Branco;R.1 Gaveta 2 Frente Caixa;Sim
+1;728.0;115.9;Travessa;;;;;MDF 16mm Branco;R.1 Gaveta 2 Fundo Caixa;Sim
+1;740.0;280.0;Fundo;;;;;MDF 6mm Cru;R.1 Gaveta 2 Fundo;Sim
+1;764.0;158.9;Porta;Fita PVC 1mm Branco;Fita PVC 1mm Branco;Fita PVC 1mm Branco;Fita PVC 1mm Branco;MDF 18mm Branco;R.1 Gaveta 2 Frente (corredica Corredica oculta Hafele Matrix Invisa A30 GT2 300mm (ext. total, push), par 300mm);Nao
+1;300.0;115.9;Lateral;;;;;MDF 16mm Branco;R.1 Gaveta 3 Lateral E;Sim
+1;300.0;115.9;Lateral;;;;;MDF 16mm Branco;R.1 Gaveta 3 Lateral D;Sim
+1;728.0;115.9;Travessa;;;;;MDF 16mm Branco;R.1 Gaveta 3 Frente Caixa;Sim
+1;728.0;115.9;Travessa;;;;;MDF 16mm Branco;R.1 Gaveta 3 Fundo Caixa;Sim
+1;740.0;280.0;Fundo;;;;;MDF 6mm Cru;R.1 Gaveta 3 Fundo;Sim
+1;764.0;158.9;Porta;Fita PVC 1mm Branco;Fita PVC 1mm Branco;Fita PVC 1mm Branco;Fita PVC 1mm Branco;MDF 18mm Branco;R.1 Gaveta 3 Frente (corredica Corredica oculta Hafele Matrix Invisa A30 GT2 300mm (ext. total, push), par 300mm);Nao
+1;1460.2;764.0;Porta;Fita PVC 1mm Branco;Fita PVC 1mm Branco;Fita PVC 1mm Branco;Fita PVC 1mm Branco;MDF 15mm Branco;R.2 Porta 1 (3x dobradica caneco 35mm);Nao
+1;770.0;384.0;Prateleira;;;;;MDF 15mm Branco;Divisoria H R.1;Sim
+1;2000;400;Lateral;;;;;MDF 15mm Branco;Lateral Esquerda;Sim
+1;2000;400;Lateral;;;;;MDF 15mm Branco;Lateral Direita;Sim

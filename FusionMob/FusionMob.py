@@ -25,7 +25,7 @@ import math
 
 # Add-in version (keep in sync with FusionMob.manifest). Bump the patch digit
 # (last number) on every modification — see CLAUDE.md "Versioning".
-__version__ = '1.1.1'
+__version__ = '1.2.2'
 
 app = None
 ui = None
@@ -2345,6 +2345,15 @@ class EditCabinetExecuteHandler(adsk.core.CommandEventHandler):
                 return
             occ, _old_cfg = _edit_cabinets[idx]
 
+            # This dialog only exposes a single-region cabinet. If the cabinet
+            # carries a custom multi-region layout, editing it here would flatten
+            # that layout — defer to the visual Cabinet Layout palette instead.
+            if is_layout_split(_old_cfg):
+                ui.messageBox('This cabinet has a custom multi-region layout.\n\n'
+                              'Edit it with the "Cabinet Layout" command so its '
+                              'regions are preserved.')
+                return
+
             cfg = read_cabinet_inputs(inputs)
             err = validate_cfg(cfg)
             if err:
@@ -2654,7 +2663,9 @@ def _show_layout_palette():
     palettes = ui.palettes
     pal = palettes.itemById(LAYOUT_PALETTE_ID)
     if not pal:
-        html_path = os.path.join(RES_DIR, 'ui', 'layout_editor.html')
+        # Fusion turns this into a file:// URL; Windows backslashes get mangled
+        # into %5C ("ERR_INVALID_URL"), so hand it a forward-slash path.
+        html_path = os.path.join(RES_DIR, 'ui', 'layout_editor.html').replace('\\', '/')
         pal = palettes.add(LAYOUT_PALETTE_ID, 'FusionMob - Layout', html_path,
                            True, True, True, 480, 680)
         try:
@@ -2745,7 +2756,7 @@ def run(context):
 
 
 def stop(context):
-    global _marking_menu_handler
+    global _marking_menu_handler, _layout_palette_handler
     try:
         if _marking_menu_handler:
             try:
@@ -2754,13 +2765,22 @@ def stop(context):
                 pass
             _marking_menu_handler = None
 
+        # Tear down the layout palette.
+        pal = ui.palettes.itemById(LAYOUT_PALETTE_ID)
+        if pal:
+            try:
+                pal.deleteMe()
+            except:
+                pass
+        _layout_palette_handler = None
+
         workspace = ui.workspaces.itemById(WORKSPACE_ID)
         tab = workspace.toolbarTabs.itemById(TAB_ID)
         if tab:
             panel = tab.toolbarPanels.itemById(PANEL_ID)
             if panel:
                 for cmd_id in (NEW_PANEL_CMD_ID, NEW_CABINET_CMD_ID,
-                               EDIT_CABINET_CMD_ID, EXPORT_CMD_ID):
+                               EDIT_CABINET_CMD_ID, LAYOUT_CMD_ID, EXPORT_CMD_ID):
                     ctrl = panel.controls.itemById(cmd_id)
                     if ctrl:
                         ctrl.deleteMe()
