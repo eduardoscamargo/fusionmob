@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FusionMob - Preferências</title>
+<style>
+  /* Fusion 360-inspired dark theme, matching layout_editor.html. Single narrow
+     column (the palette docks at ~480px). Common defaults first; shop-level knobs
+     live inside collapsed "Avancado" sections. */
+  :root {
+    --bg:#2b2b2b; --bg-2:#323232; --panel:#3a3a3a; --panel-2:#434343;
+    --line:#242424; --line-2:#4d4d4d;
+    --ink:#e8e8e8; --muted:#9a9a9a; --faint:#777;
+    --accent:#0696d7; --accent-2:#29b6e8; --accent-ink:#fff;
+    --ok:#6cc04a; --warn:#e6a23c; --err:#ec5b56;
+    --radius:6px;
+  }
+  * { box-sizing:border-box; }
+  html,body { height:100%; }
+  body { margin:0; font:13px/1.45 "Segoe UI",Roboto,Arial,sans-serif; color:var(--ink);
+         background:var(--bg); -webkit-font-smoothing:antialiased; }
+  h1,h2,h3,h4 { margin:0; font-weight:600; }
+  button { font-family:inherit; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#555; border-radius:6px; border:2px solid var(--bg); }
+  ::-webkit-scrollbar-track { background:transparent; }
+
+  .app { display:flex; flex-direction:column; height:100vh; }
+  .topbar { display:flex; align-items:center; gap:8px; padding:8px 12px;
+            background:linear-gradient(180deg,#3d3d3d,#333); border-bottom:1px solid var(--line);
+            flex:0 0 auto; }
+  .brand { display:flex; align-items:center; gap:8px; margin-right:auto; }
+  .brand .logo { width:22px; height:22px; border-radius:5px; flex:0 0 auto;
+                 background:linear-gradient(135deg,var(--accent),#0b6ea8);
+                 display:flex; align-items:center; justify-content:center; color:#fff;
+                 font-weight:700; font-size:13px; }
+  .brand .title { font-size:13px; font-weight:600; letter-spacing:.02em; }
+  .brand .sub { font-size:10px; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; }
+
+  .scroll { flex:1 1 auto; overflow-y:auto; overflow-x:hidden; padding:12px; }
+
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+          margin:0 0 12px; overflow:hidden; }
+  .card > .head { display:flex; align-items:center; gap:8px; padding:10px 12px;
+                  font-size:12px; font-weight:600; letter-spacing:.03em; }
+  .card > .body { padding:4px 12px 12px; }
+
+  .section { border:1px solid var(--line); border-radius:var(--radius); margin:0 0 10px;
+             background:var(--bg-2); overflow:hidden; }
+  .section > .shead { display:flex; align-items:center; gap:8px; width:100%; cursor:pointer;
+                      padding:11px 12px; background:none; border:0; color:var(--ink);
+                      font-size:12px; font-weight:600; text-align:left; letter-spacing:.02em; }
+  .section > .shead:hover { background:var(--panel); }
+  .section > .shead .chev { margin-left:auto; transition:transform .15s ease; color:var(--muted); }
+  .section > .sbody { padding:2px 12px 12px; display:none; }
+  .section.open > .sbody { display:block; }
+  .section.open > .shead .chev { transform:rotate(90deg); }
+
+  .hint { color:var(--faint); font-size:11px; margin:2px 0 10px; }
+
+  .row { display:flex; align-items:center; gap:8px; margin:8px 0; }
+  .row > label { flex:0 0 150px; color:var(--muted); font-size:12px; }
+  .row .grow { flex:1 1 auto; min-width:0; }
+
+  input[type=number], input[type=text], select {
+    width:100%; padding:6px 8px; border:1px solid var(--line-2); border-radius:5px;
+    background:#2c2c2c; color:var(--ink); font-size:12px; outline:none; }
+  input[type=number]:focus, input[type=text]:focus, select:focus {
+    border-color:var(--accent); box-shadow:0 0 0 2px rgba(6,150,215,.25); }
+  select { cursor:pointer; }
+
+  .field { position:relative; flex:1 1 auto; }
+  .field .unit { position:absolute; right:8px; top:50%; transform:translateY(-50%);
+                 font-size:10px; color:var(--faint); pointer-events:none; }
+  .field.has-unit input { padding-right:26px; }
+
+  .sw { position:relative; display:inline-block; width:38px; height:20px; flex:0 0 auto; }
+  .sw input { position:absolute; inset:0; width:100%; height:100%; margin:0;
+              opacity:0; cursor:pointer; z-index:2; }
+  .sw .track { position:absolute; inset:0; background:#555; border-radius:20px;
+               transition:.15s; cursor:pointer; }
+  .sw .track:before { content:""; position:absolute; width:16px; height:16px; left:2px; top:2px;
+                      background:#ddd; border-radius:50%; transition:.15s; }
+  .sw input:checked + .track { background:var(--accent); }
+  .sw input:checked + .track:before { transform:translateX(18px); background:#fff; }
+
+  /* materials table */
+  table.mats { width:100%; border-collapse:collapse; margin:4px 0 10px; }
+  table.mats th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+                  color:var(--faint); font-weight:600; padding:2px 6px 6px; }
+  table.mats td { padding:3px 4px; vertical-align:middle; }
+  table.mats td.name { width:auto; }
+  table.mats td.thk { width:78px; }
+  table.mats td.del { width:30px; text-align:center; }
+  .iconbtn { width:26px; height:26px; border:1px solid var(--line-2); border-radius:5px;
+             background:#454545; color:var(--ink); cursor:pointer; font-size:14px; line-height:1;
+             display:inline-flex; align-items:center; justify-content:center; }
+  .iconbtn:hover { background:#5a3030; border-color:#7a4040; }
+
+  .btns { display:flex; flex-wrap:wrap; gap:8px; }
+  .btn { padding:7px 12px; border:1px solid var(--line-2); border-radius:5px;
+         background:#454545; color:var(--ink); cursor:pointer; font-size:12px; font-weight:500;
+         display:inline-flex; align-items:center; gap:6px; }
+  .btn:hover { background:#525252; border-color:#666; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .btn.primary:hover { background:var(--accent-2); }
+  .btn.ghost { background:transparent; }
+  .btn:disabled { opacity:.45; cursor:default; }
+
+  .footer { flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:10px 12px;
+            background:#333; border-top:1px solid var(--line); }
+  .status { flex:1 1 auto; font-size:11px; color:var(--muted); min-width:0;
+            overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .status.ok { color:var(--ok); }
+  .status.err { color:var(--err); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">FM</div>
+      <div>
+        <div class="title">FusionMob</div>
+        <div class="sub">Preferências</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll">
+    <div class="card">
+      <div class="head">Materiais (chapas)</div>
+      <div class="body">
+        <div class="hint">Sua biblioteca de chapas. Aparece em todos os menus de material.
+          A espessura é informativa (o CorteCloud lê pelo nome).</div>
+        <table class="mats">
+          <thead><tr><th class="name">Nome</th><th class="thk">Espessura</th><th class="del"></th></tr></thead>
+          <tbody id="matBody"></tbody>
+        </table>
+        <div class="btns"><button class="btn" id="addMat">+ Adicionar material</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="head">Padrões do armário</div>
+      <div class="body">
+        <div class="hint">Valores iniciais de cada novo armário. Você ainda pode alterar
+          tudo por armário nos comandos Novo/Editar Armário e Layout.</div>
+        <div id="form"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="status" id="status"></div>
+    <button class="btn ghost" id="resetBtn">Restaurar padrões de fábrica</button>
+    <button class="btn primary" id="saveBtn">Salvar</button>
+  </div>
+</div>
+
+<script>
+/* ---- bridge to the add-in (same contract as layout_editor.html) ------------ */
+function send(action, obj){
+  try {
+    if (typeof adsk !== "undefined" && adsk.fusionSendData){
+      var ret = adsk.fusionSendData(action, JSON.stringify(obj||{}));
+      return Promise.resolve(ret).then(function(s){
+        if (s === undefined || s === null || s === "") return null;
+        try { return JSON.parse(s); } catch(e){ return {__raw:String(s)}; }
+      }, function(e){ return {__err:String(e)}; });
+    }
+  } catch(e){ return Promise.resolve({__err:String(e)}); }
+  return Promise.resolve(null);   // bridge not ready / running in a plain browser
+}
+
+var state = { cfg:{}, materials:[], slides:[], fita_choices:[], factory:null };
+
+/* ---- nested-path get/set on the cfg -------------------------------------- */
+function getPath(obj, path){
+  var parts = path.split("."), n = obj;
+  for (var i=0;i<parts.length;i++){ if (n==null) return undefined; n = n[parts[i]]; }
+  return n;
+}
+function setPath(obj, path, val){
+  var parts = path.split("."), n = obj;
+  for (var i=0;i<parts.length-1;i++){ if (n[parts[i]]==null) n[parts[i]]={}; n=n[parts[i]]; }
+  n[parts[parts.length-1]] = val;
+}
+
+/* ---- default-form field specification ------------------------------------ */
+/* type: num | int | text | bool | material | slide | fita */
+var SECTIONS = [
+  { title:"Dimensões e material", open:true, fields:[
+    { p:"W", l:"Largura (W)", t:"num", u:"mm" },
+    { p:"H", l:"Altura (H)", t:"num", u:"mm" },
+    { p:"D", l:"Profundidade (D)", t:"num", u:"mm" },
+    { p:"t", l:"Espessura carcaça", t:"num", u:"mm" },
+    { p:"material", l:"Material carcaça", t:"material" },
+    { p:"n_shelves", l:"Prateleiras", t:"int" },
+    { p:"shelf_align_front", l:"Prateleiras na frente", t:"bool" },
+  ]},
+  { title:"Fita de borda", open:true, fields:[
+    { p:"fita.name_thin", l:"Fita fina (0.4mm)", t:"text" },
+    { p:"fita.name_thick", l:"Fita grossa (1mm)", t:"text" },
+    { p:"fita.carcass", l:"Fita carcaça", t:"fita" },
+    { p:"fita.fronts", l:"Fita frentes", t:"fita" },
+  ]},
+  { title:"Fundo", open:false, fields:[
+    { p:"with_back", l:"Com fundo", t:"bool" },
+    { p:"back_material", l:"Material fundo", t:"material" },
+    { p:"back_t", l:"Espessura fundo", t:"num", u:"mm" },
+    { p:"dado_depth", l:"Profund. do rasgo", t:"num", u:"mm" },
+    { p:"back_setback", l:"Recuo do fundo", t:"num", u:"mm" },
+  ]},
+  { title:"Rodapé", open:false, fields:[
+    { p:"with_toe_kick", l:"Com rodapé", t:"bool" },
+    { p:"toe_kick_material", l:"Material rodapé", t:"material" },
+    { p:"toe_kick_t", l:"Espessura rodapé", t:"num", u:"mm" },
+    { p:"toe_kick_height", l:"Altura rodapé", t:"num", u:"mm" },
+    { p:"toe_kick_setback", l:"Recuo rodapé", t:"num", u:"mm" },
+    { p:"toe_kick_max_span", l:"Vão máx. sem reforço", t:"num", u:"mm" },
+  ]},
+  { title:"Portas", open:false, fields:[
+    { p:"with_doors", l:"Com portas", t:"bool" },
+    { p:"n_doors", l:"Número de portas", t:"int" },
+    { p:"door_gap", l:"Folga entre portas", t:"num", u:"mm" },
+    { p:"door_inset", l:"Porta embutida (inset)", t:"bool" },
+    { p:"door_material", l:"Material porta", t:"material" },
+    { p:"door_t", l:"Espessura porta", t:"num", u:"mm" },
+    { p:"with_hinges", l:"Furação dobradiça", t:"bool" },
+  ]},
+  { title:"Gavetas", open:false, fields:[
+    { p:"with_drawers", l:"Com gavetas", t:"bool" },
+    { p:"n_drawers", l:"Número de gavetas", t:"int" },
+    { p:"drawer_gap", l:"Folga entre gavetas", t:"num", u:"mm" },
+    { p:"drawer_inset", l:"Gaveta embutida (inset)", t:"bool" },
+    { p:"slide_key", l:"Corrediça", t:"slide" },
+    { p:"insert_real_hardware", l:"Inserir modelo 3D", t:"bool" },
+    { p:"drawer.box_material", l:"Material caixa", t:"material" },
+    { p:"drawer.box_t", l:"Espessura caixa", t:"num", u:"mm" },
+    { p:"drawer.bottom_material", l:"Material fundo gaveta", t:"material" },
+    { p:"drawer.bottom_t", l:"Espessura fundo", t:"num", u:"mm" },
+    { p:"drawer.face_material", l:"Material frente", t:"material" },
+    { p:"drawer.face_t", l:"Espessura frente", t:"num", u:"mm" },
+  ]},
+  { title:"Dobradiça (avançado)", open:false, fields:[
+    { p:"hinge.cup_diameter", l:"Diâmetro do caneco", t:"num", u:"mm" },
+    { p:"hinge.cup_depth", l:"Profund. do caneco", t:"num", u:"mm" },
+    { p:"hinge.cup_edge", l:"Borda até centro", t:"num", u:"mm" },
+    { p:"hinge.end_inset", l:"Recuo das pontas", t:"num", u:"mm" },
+    { p:"hinge.shelf_clearance", l:"Folga da prateleira", t:"num", u:"mm" },
+  ]},
+  { title:"Tolerâncias (avançado)", open:false, fields:[
+    { p:"tol.dado_bottom_clearance", l:"Folga fundo do rasgo", t:"num", u:"mm" },
+    { p:"tol.dado_side_clearance", l:"Folga lateral do rasgo", t:"num", u:"mm" },
+    { p:"tol.shelf_back_gap", l:"Folga prat.-fundo", t:"num", u:"mm" },
+    { p:"tol.shelf_front_setback", l:"Recuo da prateleira", t:"num", u:"mm" },
+    { p:"tol.shelf_door_clearance", l:"Folga prat.-porta", t:"num", u:"mm" },
+  ]},
+];
+
+var inputs = [];   // {p, t, el} for save-time collection
+
+/* ---- rendering ----------------------------------------------------------- */
+function el(tag, attrs, kids){
+  var e = document.createElement(tag);
+  if (attrs) for (var k in attrs){ if (k==="class") e.className=attrs[k]; else e.setAttribute(k, attrs[k]); }
+  (kids||[]).forEach(function(c){ e.appendChild(typeof c==="string"?document.createTextNode(c):c); });
+  return e;
+}
+
+function materialOptions(current){
+  var names = state.materials.map(function(m){ return m.name; });
+  if (current && names.indexOf(current) < 0) names = [current].concat(names);
+  return names;
+}
+
+function makeSelect(options){   // options: [{v,l}] or [string]
+  var s = el("select");
+  options.forEach(function(o){
+    var v = (typeof o==="object") ? o.v : o;
+    var l = (typeof o==="object") ? o.l : o;
+    var op = el("option"); op.value = v; op.textContent = l; s.appendChild(op);
+  });
+  return s;
+}
+
+function makeField(f){
+  var val = getPath(state.cfg, f.p);
+  var control;
+  if (f.t === "bool"){
+    var wrap = el("span", {class:"sw"});
+    var cb = el("input", {type:"checkbox"}); cb.checked = !!val;
+    wrap.appendChild(cb); wrap.appendChild(el("span", {class:"track"}));
+    inputs.push({p:f.p, t:f.t, el:cb});
+    return rowWith(f.l, wrap);
+  }
+  if (f.t === "material"){
+    control = makeSelect(materialOptions(val)); control.value = (val==null?"":val);
+    inputs.push({p:f.p, t:"text", el:control});
+    return rowWith(f.l, growWrap(control));
+  }
+  if (f.t === "slide"){
+    control = makeSelect(state.slides.map(function(s){ return {v:s.key, l:s.desc}; }));
+    control.value = (val==null?"":val);
+    inputs.push({p:f.p, t:"text", el:control});
+    return rowWith(f.l, growWrap(control));
+  }
+  if (f.t === "fita"){
+    control = makeSelect(state.fita_choices.map(function(c){ return {v:c.value, l:c.label}; }));
+    control.value = (val==null?"":val);
+    inputs.push({p:f.p, t:"text", el:control});
+    return rowWith(f.l, growWrap(control));
+  }
+  if (f.t === "text"){
+    control = el("input", {type:"text"}); control.value = (val==null?"":val);
+    inputs.push({p:f.p, t:"text", el:control});
+    return rowWith(f.l, growWrap(control));
+  }
+  // num / int
+  control = el("input", {type:"number", step:(f.t==="int"?"1":"any")});
+  control.value = (val==null?"":val);
+  inputs.push({p:f.p, t:f.t, el:control});
+  var fld = el("div", {class:"field" + (f.u?" has-unit":"")}, [control]);
+  if (f.u) fld.appendChild(el("span", {class:"unit"}, [f.u]));
+  return rowWith(f.l, fld);
+}
+
+function growWrap(c){ c.className = (c.className?c.className+" ":"")+"grow"; return c; }
+function rowWith(label, control){
+  return el("div", {class:"row"}, [ el("label", {}, [label]), control ]);
+}
+
+function renderForm(){
+  inputs = [];
+  var host = document.getElementById("form");
+  host.innerHTML = "";
+  SECTIONS.forEach(function(sec){
+    var sbody = el("div", {class:"sbody"});
+    sec.fields.forEach(function(f){ sbody.appendChild(makeField(f)); });
+    var chev = el("span", {class:"chev"}, ["›"]);
+    var head = el("button", {class:"shead", type:"button"}, [ el("span", {}, [sec.title]), chev ]);
+    var section = el("div", {class:"section" + (sec.open?" open":"")}, [head, sbody]);
+    head.addEventListener("click", function(){ section.classList.toggle("open"); });
+    host.appendChild(section);
+  });
+}
+
+/* ---- materials table ----------------------------------------------------- */
+function renderMaterials(){
+  var body = document.getElementById("matBody");
+  body.innerHTML = "";
+  state.materials.forEach(function(m, i){
+    var name = el("input", {type:"text"}); name.value = m.name || "";
+    name.addEventListener("input", function(){ state.materials[i].name = name.value; });
+    name.addEventListener("change", refreshMaterialSelects);
+    var thk = el("input", {type:"number", step:"any"}); thk.value = (m.thickness==null?"":m.thickness);
+    thk.addEventListener("input", function(){ state.materials[i].thickness = thk.value; });
+    var del = el("button", {class:"iconbtn", type:"button", title:"Remover"}, ["×"]);
+    del.addEventListener("click", function(){ state.materials.splice(i,1); renderMaterials(); refreshMaterialSelects(); });
+    body.appendChild(el("tr", {}, [
+      el("td", {class:"name"}, [name]),
+      el("td", {class:"thk"}, [thk]),
+      el("td", {class:"del"}, [del]),
+    ]));
+  });
+}
+
+/* Re-render the form so material dropdowns reflect the edited table, keeping
+   the current form values. */
+function refreshMaterialSelects(){ collectForm(); renderForm(); }
+
+/* ---- collect current form values back into state.cfg --------------------- */
+function collectForm(){
+  inputs.forEach(function(inp){
+    var v;
+    if (inp.t === "bool") v = inp.el.checked;
+    else if (inp.t === "int") v = parseInt(inp.el.value, 10);
+    else if (inp.t === "num") v = parseFloat(inp.el.value);
+    else v = inp.el.value;
+    if ((inp.t === "int" || inp.t === "num") && isNaN(v)) return;  // leave prior value
+    setPath(state.cfg, inp.p, v);
+  });
+}
+
+/* ---- status + actions ---------------------------------------------------- */
+function setStatus(msg, kind){
+  var s = document.getElementById("status");
+  s.textContent = msg || ""; s.className = "status" + (kind?(" "+kind):"");
+}
+
+function applyState(r){
+  if (!r) return;
+  state.cfg = r.cfg || {};
+  state.materials = (r.materials || []).map(function(m){ return {name:m.name, thickness:m.thickness}; });
+  state.slides = r.slides || [];
+  state.fita_choices = r.fita_choices || [];
+  if (r.factory) state.factory = r.factory;
+  renderMaterials();
+  renderForm();
+}
+
+function doSave(){
+  collectForm();
+  setStatus("Salvando...");
+  send("save", { materials: state.materials, cabinet_defaults: state.cfg }).then(function(r){
+    if (r && r.ok){ setStatus("Preferências salvas.", "ok"); }
+    else { setStatus((r && r.error) ? r.error : "Falha ao salvar.", "err"); }
+  });
+}
+
+function doReset(){
+  setStatus("Restaurando...");
+  send("reset", {}).then(function(r){
+    applyState(r);
+    setStatus(r && r.ok ? "Padrões de fábrica restaurados." : "Falha ao restaurar.", r && r.ok ? "ok" : "err");
+  });
+}
+
+function init(tries){
+  send("init", {}).then(function(r){
+    if (!r || r.__err || r.__raw){
+      if ((tries||0) < 20){ setTimeout(function(){ init((tries||0)+1); }, 150); return; }
+      setStatus("Não foi possível conectar ao add-in.", "err"); return;
+    }
+    applyState(r);
+    setStatus("");
+  });
+}
+
+document.getElementById("addMat").addEventListener("click", function(){
+  collectForm();
+  state.materials.push({ name:"", thickness:18 });
+  renderMaterials(); refreshMaterialSelects();
+});
+document.getElementById("saveBtn").addEventListener("click", doSave);
+document.getElementById("resetBtn").addEventListener("click", doReset);
+
+init(0);
+</script>
+</body>
+</html>

@@ -337,6 +337,14 @@
       </div>
     </div>
 
+    <!-- advanced gate: hides the detail sections below until turned on -->
+    <div class="row" id="advRow" style="margin-top:2px;">
+      <label>Configuração avançada</label>
+      <span class="sw"><input type="checkbox" id="advancedMode"><span class="track"></span></span>
+    </div>
+    <p class="hint" id="advHint">Fundo, rodapé, portas/gavetas, fita e ajustes finos usam os
+       padrões das Preferências. Ligue para personalizar só este armário.</p>
+
     <!-- STRUCTURE (intermediate) -->
     <div class="section" id="secStructure">
       <button class="shead" data-toggle="secStructure">
@@ -383,7 +391,6 @@
           <div class="field"><input type="number" id="door_t" step="1"><span class="unit">mm</span></div></div>
         <div class="row"><label>Folga / fresta</label>
           <div class="field"><input type="number" id="door_gap" step="0.5"><span class="unit">mm</span></div></div>
-        <div class="row"><label>Fita da porta</label><input type="text" id="door_band" class="grow"></div>
         <div class="row"><label>Furação de dobradiça</label>
           <span class="sw"><input type="checkbox" id="with_hinges"><span class="track"></span></span></div>
 
@@ -395,9 +402,35 @@
           <div class="field"><input type="number" id="drawer_face_t" step="1"><span class="unit">mm</span></div></div>
         <div class="row"><label>Folga / fresta</label>
           <div class="field"><input type="number" id="drawer_gap" step="0.5"><span class="unit">mm</span></div></div>
-        <div class="row"><label>Fita da frente</label><input type="text" id="drawer_face_band" class="grow"></div>
         <div class="row"><label>Inserir modelo 3D</label>
           <span class="sw"><input type="checkbox" id="insert_real_hardware"><span class="track"></span></span></div>
+      </div>
+    </div>
+
+    <!-- FITA (edge banding) -->
+    <div class="section open" id="secFita">
+      <button class="shead" data-toggle="secFita">
+        <span>Fita de borda</span><span class="tag">— quais bordas levam fita</span>
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="sbody">
+        <p class="hint">A borda frontal do corpo (laterais/base/tampo/prateleiras/divisórias) e o
+           topo da frente do rodapé recebem fita automaticamente; portas e frentes de gaveta
+           levam fita nos quatro lados. Escolha a espessura por grupo (ou Nenhuma).</p>
+        <div class="row"><label>Bordas do corpo</label>
+          <select id="fita_carcass" class="grow">
+            <option value="none">Nenhuma</option>
+            <option value="thin">0,4mm (fina)</option>
+            <option value="thick">1mm (grossa)</option>
+          </select></div>
+        <div class="row"><label>Frentes (portas/gavetas/rodapé)</label>
+          <select id="fita_fronts" class="grow">
+            <option value="none">Nenhuma</option>
+            <option value="thin">0,4mm (fina)</option>
+            <option value="thick">1mm (grossa)</option>
+          </select></div>
+        <div class="row"><label>Nome da fita 0,4mm</label><input type="text" id="fita_name_thin" class="grow"></div>
+        <div class="row"><label>Nome da fita 1mm</label><input type="text" id="fita_name_thick" class="grow"></div>
       </div>
     </div>
 
@@ -751,11 +784,10 @@ var NUMS = ["W","H","D","t","toe_kick_height","toe_kick_setback","toe_kick_t",
             "door_t","door_gap","drawer_face_t","drawer_gap"];
 var BOOLS = ["with_back","with_toe_kick","with_hinges","insert_real_hardware"];
 var SELS = ["material","back_material","toe_kick_material","door_material"];
-var TEXTS = ["door_band"];
+var TEXTS = [];
 // nested: cfg.drawer.*  /  cfg.tol.*  /  cfg.hinge.*   -> element id : [dict, key]
 var NESTED = {
   drawer_box_material:["drawer","box_material"], drawer_face_material:["drawer","face_material"],
-  drawer_face_band:["drawer","face_band"],
   tol_dado_bottom_clearance:["tol","dado_bottom_clearance"],
   tol_dado_side_clearance:["tol","dado_side_clearance"],
   tol_shelf_back_gap:["tol","shelf_back_gap"],
@@ -783,6 +815,12 @@ function syncFormFromCfg(){
     if (el.tagName==="SELECT") fillSelect(id, state.materials, d[ref[1]]);
     else el.value = d[ref[1]];
   }
+  // Fita (edge banding): fixed-option selects + editable tape names.
+  var f = c.fita||{}, fe;
+  fe=byId("fita_name_thin");  if(fe) fe.value = f.name_thin||"";
+  fe=byId("fita_name_thick"); if(fe) fe.value = f.name_thick||"";
+  fe=byId("fita_carcass");    if(fe) fe.value = f.carcass||"thin";
+  fe=byId("fita_fronts");     if(fe) fe.value = f.fronts||"thick";
 }
 function readCfgFromForm(){
   var c = state.cfg;
@@ -796,6 +834,13 @@ function readCfgFromForm(){
     if (!c[ref[0]]) c[ref[0]] = {};
     c[ref[0]][ref[1]] = NESTED_NUM[id] ? (parseFloat(el.value)||0) : el.value;
   }
+  // Fita (edge banding).
+  if(!c.fita) c.fita = {};
+  var fr;
+  fr=byId("fita_name_thin");  if(fr) c.fita.name_thin  = fr.value;
+  fr=byId("fita_name_thick"); if(fr) c.fita.name_thick = fr.value;
+  fr=byId("fita_carcass");    if(fr) c.fita.carcass    = fr.value;
+  fr=byId("fita_fronts");     if(fr) c.fita.fronts     = fr.value;
 }
 
 /* ---- small DOM helpers ------------------------------------------------------ */
@@ -930,14 +975,23 @@ function renderWizard(){
       wizRow("wW","Largura (L)","mm",c.W)+ wizRow("wH","Altura (A)","mm",c.H)+
       wizRow("wD","Profundidade (P)","mm",c.D)+
       '<div class="row"><label>Material</label><select id="wMat" class="grow"></select></div>'+
-      wizRow("wT","Espessura","mm",c.t);
+      wizRow("wT","Espessura","mm",c.t)+
+      '<div class="subhead">Fita de borda</div>'+
+      '<p class="steplead">Espessura da fita nas bordas visíveis. Padrão: corpo 0,4mm, frentes 1mm.</p>'+
+      wizFitaRow("wFitaCarcass","Bordas do corpo")+
+      wizFitaRow("wFitaFronts","Frentes (portas/gavetas)");
     fillSelect("wMat", state.materials, c.material);
+    var wf = c.fita||{};
+    byId("wFitaCarcass").value = wf.carcass||"thin";
+    byId("wFitaFronts").value = wf.fronts||"thick";
     // mirror the main diagram into the wizard
     var main = byId("dimDiagram"); if (main) byId("wizDiagram").innerHTML = main.innerHTML;
     ["wW","wH","wD","wT"].forEach(function(id){
       byId(id).addEventListener("input", wizReadMeasures);
     });
     byId("wMat").addEventListener("change", wizReadMeasures);
+    byId("wFitaCarcass").addEventListener("change", wizReadMeasures);
+    byId("wFitaFronts").addEventListener("change", wizReadMeasures);
     next.disabled = false;
   }
   else if (WIZ.step===2){
@@ -967,6 +1021,7 @@ function renderWizard(){
         rrow("Material", esc(c.material)+"  ·  "+fmt(c.t)+" mm")+
         rrow("Fundo", c.with_back?"Sim":"Não")+
         rrow("Rodapé", c.with_toe_kick?(fmt(c.toe_kick_height)+" mm"):"Não")+
+        rrow("Fita", "corpo "+(FITA_LABEL[(c.fita||{}).carcass]||"—")+"  ·  frentes "+(FITA_LABEL[(c.fita||{}).fronts]||"—"))+
         rrow("Interior", esc(it))+
       '</div>'+
       '<div class="btns" style="margin-top:14px;">'+
@@ -983,6 +1038,13 @@ function wizRow(id,label,unit,val){
     '<input type="number" id="'+id+'" step="10" value="'+val+'"><span class="unit">'+unit+'</span></div></div>';
 }
 function rrow(k,v){ return '<div class="rrow"><span class="rk">'+k+'</span><span class="rv">'+v+'</span></div>'; }
+function wizFitaRow(id,label){
+  return '<div class="row"><label>'+label+'</label><select id="'+id+'" class="grow">'+
+    '<option value="none">Nenhuma</option>'+
+    '<option value="thin">0,4mm (fina)</option>'+
+    '<option value="thick">1mm (grossa)</option></select></div>';
+}
+var FITA_LABEL = { none:"Nenhuma", thin:"0,4mm", thick:"1mm" };
 
 function pickPreset(k){
   WIZ.choicePreset = k;
@@ -997,6 +1059,9 @@ function wizReadMeasures(){
   c.D = parseFloat(byId("wD").value)||c.D;
   c.t = parseFloat(byId("wT").value)||c.t;
   var m = byId("wMat"); if (m) c.material = m.value;
+  if (!c.fita) c.fita = {};
+  var fca = byId("wFitaCarcass"); if (fca) c.fita.carcass = fca.value;
+  var ffr = byId("wFitaFronts");  if (ffr) c.fita.fronts  = ffr.value;
   renderDiagram();
   var main = byId("dimDiagram"), wd = byId("wizDiagram");
   if (main && wd) wd.innerHTML = main.innerHTML;
@@ -1064,6 +1129,18 @@ function bindForm(){
       byId(this.getAttribute("data-toggle")).classList.toggle("open"); });
   });
 
+  // Advanced gate: keep the screen clean by hiding the detail sections (their
+  // defaults come from Preferences) until "Configuração avançada" is ticked.
+  // Hiding is cosmetic only — readCfgFromForm reads every field regardless.
+  function applyAdvanced(){
+    var on = byId("advancedMode").checked;
+    ["secStructure","secFronts","secFita","secAdvanced"].forEach(function(id){
+      var el = byId(id); if (el) el.style.display = on ? "" : "none";
+    });
+  }
+  byId("advancedMode").addEventListener("change", applyAdvanced);
+  applyAdvanced();
+
   // target selector
   byId("target").addEventListener("change", function(){
     var id=this.value; state.target=id;
@@ -1118,15 +1195,17 @@ function demoCfg(){
     with_toe_kick:true, toe_kick_material:"MDF 18mm Branco", toe_kick_t:18, toe_kick_height:100,
     toe_kick_setback:75, toe_kick_max_span:500,
     with_doors:false, door_material:"MDF 18mm Branco", door_t:18, n_doors:2, door_gap:3,
-    door_inset:false, door_band:"Fita PVC 1mm Branco", with_hinges:true,
+    door_inset:false, with_hinges:true,
     hinge:{cup_diameter:35,cup_depth:12,cup_edge:22.5,end_inset:100,screw_diameter:5,
            screw_depth:12,plate_front:37,screw_pitch:32,shelf_clearance:30},
     with_drawers:false, n_drawers:3, drawer_inset:false, drawer_gap:3,
     slide_key:"hafele_matrix_invisa_a30_300", insert_real_hardware:false,
     drawer:{box_material:"MDF 16mm Branco",box_t:16,bottom_material:"MDF 6mm Cru",bottom_t:6,
             bottom_dado_depth:6,bottom_up:12,bottom_play:0.4,box_height:150,box_top_gap:30,
-            face_material:"MDF 18mm Branco",face_t:18,face_band:"Fita PVC 1mm Branco",
+            face_material:"MDF 18mm Branco",face_t:18,
             back_height_reduction:0},
+    fita:{name_thin:"Fita PVC 0.4mm Branco",name_thick:"Fita PVC 1mm Branco",
+          carcass:"thin",fronts:"thick"},
     tol:{dado_bottom_clearance:0.5,dado_side_clearance:0.2,shelf_back_gap:1,
          shelf_front_setback:30,shelf_door_clearance:2},
     layout:{type:"shelves",count:3,inset:false,gap:null,shelf_align_front:null,
