@@ -25,7 +25,7 @@ import math
 
 # Add-in version (keep in sync with FusionMob.manifest). Bump the patch digit
 # (last number) on every modification — see CLAUDE.md "Versioning".
-__version__ = '1.4.0'
+__version__ = '1.5.4'
 
 app = None
 ui = None
@@ -51,10 +51,14 @@ NEW_CABINET_CMD_ID = 'FusionMobNewCabinet'
 EDIT_CABINET_CMD_ID = 'FusionMobEditCabinet'
 LAYOUT_CMD_ID = 'FusionMobCabinetLayout'
 EXPORT_CMD_ID = 'FusionMobExportCutList'
+PREFS_CMD_ID = 'FusionMobPreferences'
 
 # Interior-layout editor palette (HTML). Reference kept so stop() can unregister.
 LAYOUT_PALETTE_ID = 'FusionMobLayoutPalette'
 _layout_palette_handler = None
+# Preferences editor palette (HTML). Reference kept so stop() can unregister.
+PREFS_PALETTE_ID = 'FusionMobPrefsPalette'
+_prefs_palette_handler = None
 
 # Attribute group/name used to tag panels we generate.
 ATTR_GROUP = 'FusionMob'
@@ -412,6 +416,103 @@ def slide_keys():
     return items or [(FALLBACK_SLIDE['key'], FALLBACK_SLIDE['description'])]
 
 
+# -----------------------------------------------------------------------------
+# User preferences (cross-document, cross-session)
+#
+# Fusion has no application-level settings store for add-ins (only per-document
+# entity attributes, used elsewhere for panelData/cabinetConfig). So preferences
+# live in a JSON file under a WRITABLE per-user location — NOT under RES_DIR,
+# which is the install folder (read-only, wiped on add-in update). Loaded lazily
+# and cached, degrading to an empty dict on any error exactly like
+# load_hardware_manifest(), so a missing/corrupt file never breaks the add-in.
+#
+# Shape:
+#   {"version": 1,
+#    "materials": [{"name": "MDF 18mm Branco", "thickness": 18.0}, ...],
+#    "cabinet_defaults": { partial cfg overriding DEFAULT_CFG: W,H,D,t, fita{},
+#                          hinge{}, drawer{}, slide_key, toe_kick*, ... }}
+#
+# The two accessors get_materials() / effective_default_cfg() are the single
+# seams the rest of the add-in reads through, so saved prefs override the
+# hardcoded MATERIALS / DEFAULT_CFG without changing any call site's shape.
+PREFS_VERSION = 1
+_PREFS_CACHE = None
+
+
+def prefs_path():
+    """Absolute path to the per-user preferences.json (writable location)."""
+    appdata = os.environ.get('APPDATA')
+    if appdata:  # Windows
+        base = os.path.join(appdata, 'FusionMob')
+    else:        # Mac / other
+        base = os.path.join(os.path.expanduser('~/Library/Application Support'), 'FusionMob')
+    return os.path.join(base, 'preferences.json')
+
+
+def load_preferences():
+    """The parsed preferences.json (cached). Degrades to {} if the file is
+    missing/invalid, so the accessors always fall back to the hardcoded defaults."""
+    global _PREFS_CACHE
+    if _PREFS_CACHE is None:
+        try:
+            with open(prefs_path(), 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            _PREFS_CACHE = data if isinstance(data, dict) else {}
+        except Exception:
+            _PREFS_CACHE = {}
+    return _PREFS_CACHE
+
+
+def save_preferences(prefs):
+    """Write preferences.json (creating its folder) and invalidate the cache so
+    the next dialog/palette sees the change. Raises on I/O error (caller reports)."""
+    global _PREFS_CACHE
+    path = prefs_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(prefs, f, ensure_ascii=False, indent=2)
+    _PREFS_CACHE = None
+
+
+def clear_preferences():
+    """Remove the preferences file (reset to factory) and invalidate the cache."""
+    global _PREFS_CACHE
+    try:
+        os.remove(prefs_path())
+    except OSError:
+        pass
+    _PREFS_CACHE = None
+
+
+def get_materials():
+    """The active material library as [(name, thickness_mm), ...]: the user's
+    saved list when present and non-empty, else the built-in MATERIALS seed.
+    Thickness is informational (CorteCloud reads it from the name); part geometry
+    uses the per-part cfg thickness, not this value."""
+    saved = load_preferences().get('materials')
+    if isinstance(saved, list):
+        out = []
+        for m in saved:
+            if isinstance(m, dict) and m.get('name'):
+                try:
+                    thk = float(m.get('thickness') or 0.0)
+                except (TypeError, ValueError):
+                    thk = 0.0
+                out.append((str(m['name']), thk))
+        if out:
+            return out
+    return list(MATERIALS)
+
+
+def effective_default_cfg():
+    """Factory DEFAULT_CFG with the user's saved cabinet defaults merged on top.
+    normalize_cfg already deep-merges a partial cfg over DEFAULT_CFG (top level +
+    tol/hinge/drawer/fita), so a saved partial produces the right effective cfg;
+    an absent/empty prefs block yields the plain normalized factory defaults."""
+    saved = load_preferences().get('cabinet_defaults')
+    return normalize_cfg(saved if isinstance(saved, dict) else {})
+
+
 def _slide_key_from_label(label):
     """Map a dropdown label (description) back to its slide key."""
     for k, desc in slide_keys():
@@ -642,7 +743,7 @@ class NewPanelCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
             material = inputs.addDropDownCommandInput(
                 'material', 'Material', adsk.core.DropDownStyles.TextListDropDownStyle)
-            for i, (name, _thk) in enumerate(MATERIALS):
+            for i, (name, _thk) in enumerate(get_materials()):
                 material.listItems.add(name, i == 0)
 
             # Finished dimensions. createByReal uses internal units (cm).
@@ -1918,22 +2019,47 @@ def _select_dropdown(dd, name):
         dd.listItems.item(0).isSelected = True
 
 
+# Inputs hidden until "Configuracao avancada" is ticked, so the New/Edit Cabinet
+# dialog opens clean — every default already comes from Preferences. Hiding is
+# purely cosmetic: read_cabinet_inputs reads each input by id regardless of
+# visibility, so the (default or loaded) values still drive the build.
+_CABINET_ADVANCED_IDS = ('thickness', 'shelfAlignFront', 'backGroup', 'toeKickGroup',
+                         'doorGroup', 'drawerGroup', 'fitaGroup', 'advGroup')
+
+
+def _apply_cabinet_advanced_visibility(inputs, visible):
+    """Show/hide the advanced (Preferences-defaulted) inputs as a group."""
+    for cid in _CABINET_ADVANCED_IDS:
+        item = inputs.itemById(cid)
+        if item:
+            item.isVisible = bool(visible)
+
+
 def add_cabinet_inputs(inputs, cfg):
-    """Build the full cabinet parameter UI, pre-filled from `cfg` (mm)."""
+    """Build the full cabinet parameter UI, pre-filled from `cfg` (mm). Only the
+    essentials show by default; the rest hide behind the 'Configuracao avancada'
+    toggle (their defaults come from Preferences)."""
     inputs.addValueInput('width', 'Largura (W)', 'mm', adsk.core.ValueInput.createByReal(cfg['W'] / 10.0))
     inputs.addValueInput('height', 'Altura (H)', 'mm', adsk.core.ValueInput.createByReal(cfg['H'] / 10.0))
     inputs.addValueInput('depth', 'Profundidade (D)', 'mm', adsk.core.ValueInput.createByReal(cfg['D'] / 10.0))
-    inputs.addValueInput('thickness', 'Espessura', 'mm', adsk.core.ValueInput.createByReal(cfg['t'] / 10.0))
     inputs.addIntegerSpinnerCommandInput('shelves', 'Prateleiras', 0, 50, 1, int(cfg['n_shelves']))
-    inputs.addBoolValueInput('shelfAlignFront', 'Prateleiras alinhadas com a frente',
-                             True, '', bool(cfg.get('shelf_align_front', False)))
 
     material = inputs.addDropDownCommandInput(
         'material', 'Material', adsk.core.DropDownStyles.TextListDropDownStyle)
-    for (name, _thk) in MATERIALS:
+    for (name, _thk) in get_materials():
         material.listItems.add(name, name == cfg['material'])
     if not material.selectedItem:
         material.listItems.item(0).isSelected = True
+
+    adv_mode = inputs.addBoolValueInput('advancedMode',
+                                        'Configuracao avancada (personalizar este armario)',
+                                        True, '', False)
+    adv_mode.tooltip = ('Mostra fundo, rodape, portas, gavetas, fita e ajustes finos. '
+                        'Os padroes vem das Preferencias; ligue para personalizar so este armario.')
+
+    inputs.addValueInput('thickness', 'Espessura', 'mm', adsk.core.ValueInput.createByReal(cfg['t'] / 10.0))
+    inputs.addBoolValueInput('shelfAlignFront', 'Prateleiras alinhadas com a frente',
+                             True, '', bool(cfg.get('shelf_align_front', False)))
 
     group = inputs.addGroupCommandInput('backGroup', 'Fundo (back panel)')
     group.isExpanded = True
@@ -1941,7 +2067,7 @@ def add_cabinet_inputs(inputs, cfg):
     g.addBoolValueInput('withBack', 'Add back panel', True, '', bool(cfg['with_back']))
     back_mat = g.addDropDownCommandInput(
         'backMaterial', 'Material do fundo', adsk.core.DropDownStyles.TextListDropDownStyle)
-    for (name, _thk) in MATERIALS:
+    for (name, _thk) in get_materials():
         back_mat.listItems.add(name, name == cfg['back_material'])
     if not back_mat.selectedItem:
         back_mat.listItems.item(0).isSelected = True
@@ -1955,7 +2081,7 @@ def add_cabinet_inputs(inputs, cfg):
     tk.addBoolValueInput('withToeKick', 'Add toe kick', True, '', bool(cfg['with_toe_kick']))
     tk_mat = tk.addDropDownCommandInput(
         'toeKickMaterial', 'Material do rodape', adsk.core.DropDownStyles.TextListDropDownStyle)
-    for (name, _thk) in MATERIALS:
+    for (name, _thk) in get_materials():
         tk_mat.listItems.add(name, name == cfg['toe_kick_material'])
     if not tk_mat.selectedItem:
         tk_mat.listItems.item(0).isSelected = True
@@ -1970,7 +2096,7 @@ def add_cabinet_inputs(inputs, cfg):
     dr.addBoolValueInput('withDoors', 'Add doors', True, '', bool(cfg['with_doors']))
     door_mat = dr.addDropDownCommandInput(
         'doorMaterial', 'Material da porta', adsk.core.DropDownStyles.TextListDropDownStyle)
-    for (name, _thk) in MATERIALS:
+    for (name, _thk) in get_materials():
         door_mat.listItems.add(name, name == cfg['door_material'])
     if not door_mat.selectedItem:
         door_mat.listItems.item(0).isSelected = True
@@ -1996,18 +2122,39 @@ def add_cabinet_inputs(inputs, cfg):
     dr_cfg = cfg['drawer']
     box_mat = dw.addDropDownCommandInput(
         'drawerBoxMaterial', 'Material da caixa', adsk.core.DropDownStyles.TextListDropDownStyle)
-    for (name, _thk) in MATERIALS:
+    for (name, _thk) in get_materials():
         box_mat.listItems.add(name, name == dr_cfg['box_material'])
     if not box_mat.selectedItem:
         box_mat.listItems.item(0).isSelected = True
     face_mat = dw.addDropDownCommandInput(
         'drawerFaceMaterial', 'Material da frente', adsk.core.DropDownStyles.TextListDropDownStyle)
-    for (name, _thk) in MATERIALS:
+    for (name, _thk) in get_materials():
         face_mat.listItems.add(name, name == dr_cfg['face_material'])
     if not face_mat.selectedItem:
         face_mat.listItems.item(0).isSelected = True
     dw.addBoolValueInput('insertRealHardware', 'Inserir modelo 3D da corredica',
                          True, '', bool(cfg['insert_real_hardware']))
+
+    # Edge banding (fita) — its own group (not buried in Advanced), since which
+    # edges get taped and how thick is a primary cut-list decision. Two editable
+    # tape names (0.4mm / 1mm) plus the thickness per part group: 'carcass' = the
+    # visible front edge of sides/base/top/shelves/dividers; 'fronts' = doors +
+    # drawer faces (all four edges) + the toe-kick front board.
+    fita = cfg['fita']
+    fita_group = inputs.addGroupCommandInput('fitaGroup', 'Fita (fita de borda)')
+    fita_group.isExpanded = True
+    fg = fita_group.children
+    fc = fg.addDropDownCommandInput(
+        'fitaCarcass', 'Bordas do corpo', adsk.core.DropDownStyles.TextListDropDownStyle)
+    for (_v, lbl) in FITA_CHOICES:
+        fc.listItems.add(lbl, lbl == _fita_choice_label(fita['carcass']))
+    ff = fg.addDropDownCommandInput(
+        'fitaFronts', 'Frentes (portas/gavetas/rodape)',
+        adsk.core.DropDownStyles.TextListDropDownStyle)
+    for (_v, lbl) in FITA_CHOICES:
+        ff.listItems.add(lbl, lbl == _fita_choice_label(fita['fronts']))
+    fg.addStringValueInput('fitaThin', 'Nome da fita 0.4mm', fita['name_thin'])
+    fg.addStringValueInput('fitaThick', 'Nome da fita 1mm', fita['name_thick'])
 
     adv = inputs.addGroupCommandInput('advGroup', 'Advanced')
     adv.isExpanded = False
@@ -2038,22 +2185,8 @@ def add_cabinet_inputs(inputs, cfg):
     a.addValueInput('hingeShelfClear', 'Dobradica: folga da prateleira', 'mm',
                     adsk.core.ValueInput.createByReal(hinge['shelf_clearance'] / 10.0))
 
-    # Edge banding (fita). Two editable tape names (0.4mm / 1mm) plus which
-    # thickness each part group uses: 'carcass' = the visible front edge of
-    # sides/base/top/shelves/dividers; 'fronts' = doors + drawer faces (all four
-    # edges) + the toe-kick front board.
-    fita = cfg['fita']
-    a.addStringValueInput('fitaThin', 'Fita 0.4mm (nome)', fita['name_thin'])
-    a.addStringValueInput('fitaThick', 'Fita 1mm (nome)', fita['name_thick'])
-    fc = a.addDropDownCommandInput(
-        'fitaCarcass', 'Fita bordas do corpo', adsk.core.DropDownStyles.TextListDropDownStyle)
-    for (_v, lbl) in FITA_CHOICES:
-        fc.listItems.add(lbl, lbl == _fita_choice_label(fita['carcass']))
-    ff = a.addDropDownCommandInput(
-        'fitaFronts', 'Fita frentes (portas/gavetas/rodape)',
-        adsk.core.DropDownStyles.TextListDropDownStyle)
-    for (_v, lbl) in FITA_CHOICES:
-        ff.listItems.add(lbl, lbl == _fita_choice_label(fita['fronts']))
+    # Start collapsed/clean; the advancedMode toggle reveals everything above.
+    _apply_cabinet_advanced_visibility(inputs, adv_mode.value)
 
 
 def read_cabinet_inputs(inputs):
@@ -2356,13 +2489,26 @@ def collect_cabinets(design):
 class NewCabinetCreatedHandler(adsk.core.CommandCreatedEventHandler):
     def notify(self, args):
         try:
-            add_cabinet_inputs(args.command.commandInputs, DEFAULT_CFG)
+            add_cabinet_inputs(args.command.commandInputs, effective_default_cfg())
+            onChange = NewCabinetInputChangedHandler()
+            args.command.inputChanged.add(onChange)
+            handlers.append(onChange)
             execHandler = NewCabinetExecuteHandler()
             args.command.execute.add(execHandler)
             handlers.append(execHandler)
         except:
             if ui:
                 ui.messageBox('New Cabinet setup failed:\n{}'.format(traceback.format_exc()))
+
+
+class NewCabinetInputChangedHandler(adsk.core.InputChangedEventHandler):
+    def notify(self, args):
+        try:
+            if args.input.id == 'advancedMode':
+                _apply_cabinet_advanced_visibility(args.inputs, args.input.value)
+        except:
+            if ui:
+                ui.messageBox('New Cabinet input failed:\n{}'.format(traceback.format_exc()))
 
 
 class NewCabinetExecuteHandler(adsk.core.CommandEventHandler):
@@ -2450,7 +2596,11 @@ class EditCabinetCreatedHandler(adsk.core.CommandCreatedEventHandler):
 class EditCabinetInputChangedHandler(adsk.core.InputChangedEventHandler):
     def notify(self, args):
         try:
-            if args.input.id != 'cabinetPick':
+            cid = args.input.id
+            if cid == 'advancedMode':
+                _apply_cabinet_advanced_visibility(args.inputs, args.input.value)
+                return
+            if cid != 'cabinetPick':
                 return
             idx = args.input.selectedItem.index
             if 0 <= idx < len(_edit_cabinets):
@@ -2906,9 +3056,9 @@ def _palette_state(design):
     """Initial payload for the editor: the option lists, the known cabinets and a
     fresh default config to start a 'new' cabinet from."""
     return {
-        'cfg': normalize_cfg(DEFAULT_CFG),
+        'cfg': effective_default_cfg(),
         'cabinets': _cabinet_list(design) if design else [],
-        'materials': [name for name, _thk in MATERIALS],
+        'materials': [name for name, _thk in get_materials()],
         'slides': [{'key': k, 'desc': d} for k, d in slide_keys()],
     }
 
@@ -2924,7 +3074,7 @@ def _palette_target(design, token):
                     return {'cfg': normalize_cfg(json.loads(attr.value)), 'id': token}
                 except (ValueError, TypeError):
                     pass
-    return {'cfg': normalize_cfg(DEFAULT_CFG), 'id': 'new'}
+    return {'cfg': effective_default_cfg(), 'id': 'new'}
 
 
 def _palette_apply(design, data):
@@ -3015,6 +3165,134 @@ class CabinetLayoutCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
 
 # -----------------------------------------------------------------------------
+# Preferences palette (edit the persistent material library + cabinet defaults)
+# -----------------------------------------------------------------------------
+def _prefs_state():
+    """Payload for the preferences editor: the current (saved-or-factory) material
+    library and cabinet defaults, the option lists, plus the pristine factory
+    values so the editor's Reset can restore them without another round-trip."""
+    def mats(pairs):
+        return [{'name': n, 'thickness': t} for n, t in pairs]
+    return {
+        'materials': mats(get_materials()),
+        'cfg': effective_default_cfg(),
+        'slides': [{'key': k, 'desc': d} for k, d in slide_keys()],
+        'fita_choices': [{'value': v, 'label': lbl} for v, lbl in FITA_CHOICES],
+        'factory': {
+            'materials': mats(MATERIALS),
+            'cfg': normalize_cfg(DEFAULT_CFG),
+        },
+    }
+
+
+def _clean_materials(raw):
+    """Validate a materials payload into [{'name','thickness'}]. Returns
+    (materials, error): names non-empty and unique (case-insensitive), thickness a
+    non-negative number; at least one material required."""
+    if not isinstance(raw, list) or not raw:
+        return None, 'Adicione ao menos um material (chapa).'
+    out, seen = [], set()
+    for m in raw:
+        name = str((m.get('name') if isinstance(m, dict) else '') or '').strip()
+        if not name:
+            return None, 'Todo material precisa de um nome.'
+        key = name.lower()
+        if key in seen:
+            return None, 'Material duplicado: "{}".'.format(name)
+        seen.add(key)
+        try:
+            thk = float(m.get('thickness') or 0.0)
+        except (TypeError, ValueError):
+            return None, 'Espessura inválida para "{}".'.format(name)
+        if thk < 0:
+            return None, 'Espessura inválida para "{}".'.format(name)
+        out.append({'name': name, 'thickness': thk})
+    return out, None
+
+
+def _prefs_save(data):
+    """Validate and persist the edited preferences. Returns {ok, error?}."""
+    materials, err = _clean_materials(data.get('materials'))
+    if err:
+        return {'ok': False, 'error': err}
+    defaults = data.get('cabinet_defaults')
+    if not isinstance(defaults, dict):
+        defaults = {}
+    # Validate the defaults as a real cabinet config (normalize first, as apply does).
+    err = validate_cfg(normalize_cfg(defaults))
+    if err:
+        return {'ok': False, 'error': err}
+    # Store flat defaults only — never pin an interior layout, so New Cabinet keeps
+    # synthesizing a fresh single region from the flat fields.
+    stored = dict(defaults)
+    stored.pop('layout', None)
+    prefs = {'version': PREFS_VERSION, 'materials': materials, 'cabinet_defaults': stored}
+    try:
+        save_preferences(prefs)
+    except Exception as e:
+        return {'ok': False, 'error': 'Não foi possível salvar as preferências: {}'.format(e)}
+    return {'ok': True, 'path': prefs_path()}
+
+
+def _prefs_reset():
+    """Clear saved preferences (revert to factory) and return the fresh state."""
+    clear_preferences()
+    state = _prefs_state()
+    state['ok'] = True
+    return state
+
+
+class PrefsPaletteHTMLHandler(adsk.core.HTMLEventHandler):
+    def notify(self, args):
+        try:
+            action = args.action
+            data = json.loads(args.data) if args.data else {}
+            if action == 'init':
+                args.returnData = json.dumps(_prefs_state())
+            elif action == 'save':
+                args.returnData = json.dumps(_prefs_save(data))
+            elif action == 'reset':
+                args.returnData = json.dumps(_prefs_reset())
+            else:
+                args.returnData = json.dumps({'ok': False, 'error': 'Unknown action.'})
+        except Exception:
+            try:
+                args.returnData = json.dumps({'ok': False, 'error': traceback.format_exc()})
+            except Exception:
+                pass
+
+
+def _show_prefs_palette():
+    """Create the preferences palette on first use, then reveal it."""
+    global _prefs_palette_handler
+    palettes = ui.palettes
+    pal = palettes.itemById(PREFS_PALETTE_ID)
+    if not pal:
+        # Forward-slash path so Fusion's file:// URL isn't mangled (see layout palette).
+        html_path = os.path.join(RES_DIR, 'ui', 'preferences.html').replace('\\', '/')
+        pal = palettes.add(PREFS_PALETTE_ID, 'FusionMob - Preferencias', html_path,
+                           True, True, True, 480, 680)
+        try:
+            pal.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateRight
+        except Exception:
+            pass
+        if _prefs_palette_handler is None:
+            _prefs_palette_handler = PrefsPaletteHTMLHandler()
+        pal.incomingFromHTML.add(_prefs_palette_handler)
+        handlers.append(_prefs_palette_handler)
+    pal.isVisible = True
+
+
+class PreferencesCreatedHandler(adsk.core.CommandCreatedEventHandler):
+    def notify(self, args):
+        try:
+            _show_prefs_palette()
+        except Exception:
+            if ui:
+                ui.messageBox('Preferences setup failed:\n{}'.format(traceback.format_exc()))
+
+
+# -----------------------------------------------------------------------------
 # Add-in lifecycle
 # -----------------------------------------------------------------------------
 def _add_command(panel, cmd_id, name, desc, created_handler, icon_name, promoted=False):
@@ -3067,6 +3345,9 @@ def run(context):
         _add_command(panel, EXPORT_CMD_ID, 'Export Cut List',
                      'Export all panels as a CorteCloud CSV',
                      ExportCutListCreatedHandler(), 'export', promoted=True)
+        _add_command(panel, PREFS_CMD_ID, 'Preferences',
+                     'Edit the material library and default cabinet parameters',
+                     PreferencesCreatedHandler(), 'new_panel')
 
         # Add "Edit Cabinet" to the right-click menu when a cabinet is clicked.
         global _marking_menu_handler
@@ -3079,7 +3360,7 @@ def run(context):
 
 
 def stop(context):
-    global _marking_menu_handler, _layout_palette_handler
+    global _marking_menu_handler, _layout_palette_handler, _prefs_palette_handler
     try:
         if _marking_menu_handler:
             try:
@@ -3088,14 +3369,16 @@ def stop(context):
                 pass
             _marking_menu_handler = None
 
-        # Tear down the layout palette.
-        pal = ui.palettes.itemById(LAYOUT_PALETTE_ID)
-        if pal:
-            try:
-                pal.deleteMe()
-            except:
-                pass
+        # Tear down the layout + preferences palettes.
+        for pal_id in (LAYOUT_PALETTE_ID, PREFS_PALETTE_ID):
+            pal = ui.palettes.itemById(pal_id)
+            if pal:
+                try:
+                    pal.deleteMe()
+                except:
+                    pass
         _layout_palette_handler = None
+        _prefs_palette_handler = None
 
         workspace = ui.workspaces.itemById(WORKSPACE_ID)
         tab = workspace.toolbarTabs.itemById(TAB_ID)
@@ -3103,14 +3386,14 @@ def stop(context):
             panel = tab.toolbarPanels.itemById(PANEL_ID)
             if panel:
                 for cmd_id in (NEW_PANEL_CMD_ID, EDIT_PANEL_CMD_ID, NEW_CABINET_CMD_ID,
-                               EDIT_CABINET_CMD_ID, LAYOUT_CMD_ID, EXPORT_CMD_ID):
+                               EDIT_CABINET_CMD_ID, LAYOUT_CMD_ID, EXPORT_CMD_ID, PREFS_CMD_ID):
                     ctrl = panel.controls.itemById(cmd_id)
                     if ctrl:
                         ctrl.deleteMe()
                 panel.deleteMe()
             tab.deleteMe()
 
-        for cmd_id in (NEW_PANEL_CMD_ID, EDIT_PANEL_CMD_ID, EXPORT_CMD_ID):
+        for cmd_id in (NEW_PANEL_CMD_ID, EDIT_PANEL_CMD_ID, EXPORT_CMD_ID, PREFS_CMD_ID):
             cmd_def = ui.commandDefinitions.itemById(cmd_id)
             if cmd_def:
                 cmd_def.deleteMe()
