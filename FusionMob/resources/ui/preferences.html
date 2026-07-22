@@ -221,6 +221,15 @@ var SECTIONS = [
     { p:"toe_kick_setback", l:"Recuo rodapé", t:"num", u:"mm" },
     { p:"toe_kick_max_span", l:"Vão máx. sem reforço", t:"num", u:"mm" },
   ]},
+  { title:"Fixação lateral", open:false, fields:[
+    { p:"joinery.bottom_mode", l:"Base inferior", t:"sel",
+      opts:[["aligned","Alinhada com base"],["over","Sobre base"]] },
+    { p:"joinery.bottom_overhang", l:"Base inf.: avanço da lateral", t:"num", u:"mm" },
+    { p:"joinery.top_mode", l:"Base superior (tampo)", t:"sel",
+      opts:[["aligned","Alinhada com base"],["over","Sobre base"]] },
+    { p:"joinery.top_overhang", l:"Tampo: avanço da lateral", t:"num", u:"mm" },
+    { p:"joinery.sides_to_floor", l:"Laterais até o piso (pés)", t:"bool" },
+  ]},
   { title:"Portas", open:false, fields:[
     { p:"with_doors", l:"Com portas", t:"bool" },
     { p:"n_doors", l:"Número de portas", t:"int" },
@@ -309,6 +318,12 @@ function makeField(f){
   }
   if (f.t === "fita"){
     control = makeSelect(state.fita_choices.map(function(c){ return {v:c.value, l:c.label}; }));
+    control.value = (val==null?"":val);
+    inputs.push({p:f.p, t:"text", el:control});
+    return rowWith(f.l, growWrap(control));
+  }
+  if (f.t === "sel"){
+    control = makeSelect((f.opts||[]).map(function(o){ return {v:o[0], l:o[1]}; }));
     control.value = (val==null?"":val);
     inputs.push({p:f.p, t:"text", el:control});
     return rowWith(f.l, growWrap(control));

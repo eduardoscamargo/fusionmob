@@ -206,6 +206,23 @@
   .review .rrow .rv { color:var(--ink); font-weight:500; }
 
   .hidden { display:none !important; }
+
+  /* Fixação lateral (side<->base joinery) editable diagram */
+  .jn-wrap { position:relative; width:100%; max-width:300px; margin:6px auto 10px; }
+  .jn-svg { width:100%; height:auto; display:block; }
+  .jn-svg .jn-panel { fill:var(--bg-2); stroke:#888; stroke-width:1.5; }
+  .jn-svg .jn-side { fill:#5b6b78; stroke:#8fa6b6; stroke-width:1.5; }
+  .jn-svg .jn-kick { fill:#3c4650; stroke:#6b7885; stroke-width:1.5; }
+  .jn-svg .jn-floor { stroke:#9aa7b2; stroke-width:2; stroke-dasharray:6 5; }
+  .jn-svg .jn-lbl { fill:var(--muted); font-size:11px; text-anchor:middle; }
+  .jn-oh { position:absolute; transform:translate(-50%,-50%);
+           display:flex; align-items:center; gap:2px; background:var(--bg-2);
+           border:1px solid var(--accent); border-radius:6px; padding:2px 4px;
+           box-shadow:0 1px 4px rgba(0,0,0,.35); }
+  .jn-oh input { width:42px; background:transparent; border:0; color:var(--ink);
+                 font-size:12px; text-align:right; outline:none; }
+  .jn-oh .unit { font-size:10px; color:var(--muted); }
+  .jn-oh.off { opacity:.35; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -375,6 +392,55 @@
           <div class="field"><input type="number" id="toe_kick_setback" step="1"><span class="unit">mm</span></div></div>
         <div class="row"><label>Vão máx. sem reforço</label>
           <div class="field"><input type="number" id="toe_kick_max_span" step="10"><span class="unit">mm</span></div></div>
+      </div>
+    </div>
+
+    <!-- FIXAÇÃO LATERAL (side<->base/top joinery) -->
+    <div class="section" id="secJoinery">
+      <button class="shead" data-toggle="secJoinery">
+        <span>Fixação lateral</span><span class="tag">— lateral × base/tampo</span>
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="sbody">
+        <p class="hint">Como a lateral encontra a base e o tampo. <b>Alinhada com base</b>:
+           base/tampo entre as laterais (laterais inteiras). <b>Sobre base</b>: base/tampo
+           em toda a largura, com a lateral apoiada sobre/sob o painel. O avanço (mm) é o
+           quanto a lateral avança sobre o painel — edite direto no desenho.</p>
+        <div class="jn-wrap">
+          <svg class="jn-svg" id="jnSvg" viewBox="0 0 240 300" xmlns="http://www.w3.org/2000/svg">
+            <rect id="jnTop"  class="jn-panel" x="46" y="18"  width="148" height="20"/>
+            <rect id="jnBase" class="jn-panel" x="46" y="216" width="148" height="20"/>
+            <rect id="jnKick" class="jn-kick"  x="30" y="236" width="180" height="46"/>
+            <rect id="jnSideL" class="jn-side" x="30" y="18" width="16" height="218"/>
+            <rect id="jnSideR" class="jn-side" x="194" y="18" width="16" height="218"/>
+            <line id="jnFloor" class="jn-floor" x1="14" y1="284" x2="226" y2="284"/>
+            <text class="jn-lbl" x="120" y="33">Tampo</text>
+            <text class="jn-lbl" x="120" y="231">Base</text>
+            <text id="jnKickLbl" class="jn-lbl" x="120" y="264">Rodapé</text>
+          </svg>
+          <!-- overhang numbers overlaid on the drawing at each junction -->
+          <div class="jn-oh" id="jnTopOhBox" style="left:15%; top:12.5%;">
+            <input type="number" id="joineryTopOverhang" step="1" min="0" title="Tampo: avanço da lateral"><span class="unit">mm</span>
+          </div>
+          <div class="jn-oh" id="jnBotOhBox" style="left:15%; top:75%;">
+            <input type="number" id="joineryBottomOverhang" step="1" min="0" title="Base: avanço da lateral"><span class="unit">mm</span>
+          </div>
+        </div>
+        <div class="row"><label>Base superior (tampo)</label>
+          <select id="joineryTopMode" class="grow">
+            <option value="aligned">Alinhada com base</option>
+            <option value="over">Sobre base</option>
+          </select></div>
+        <div class="row"><label>Base inferior</label>
+          <select id="joineryBottomMode" class="grow">
+            <option value="aligned">Alinhada com base</option>
+            <option value="over">Sobre base</option>
+          </select></div>
+        <div class="row"><label>Laterais até o piso (pés)</label>
+          <span class="sw"><input type="checkbox" id="joinerySidesToFloor"><span class="track"></span></span></div>
+        <p class="hint" id="jnFloorHint">Ligado: as laterais descem até o chão (pés laterais) e o
+           rodapé fica recuado entre elas. Desligado: as laterais param na base e o rodapé é uma
+           caixa separada em toda a largura. (Requer rodapé.)</p>
       </div>
     </div>
 
@@ -821,6 +887,14 @@ function syncFormFromCfg(){
   fe=byId("fita_name_thick"); if(fe) fe.value = f.name_thick||"";
   fe=byId("fita_carcass");    if(fe) fe.value = f.carcass||"thin";
   fe=byId("fita_fronts");     if(fe) fe.value = f.fronts||"thick";
+  // Fixação lateral (side<->base/top joinery): two modes + two overhangs.
+  var j = c.joinery||{}, je;
+  je=byId("joineryBottomMode");     if(je) je.value = j.bottom_mode||"aligned";
+  je=byId("joineryBottomOverhang"); if(je) je.value = (j.bottom_overhang!=null?j.bottom_overhang:0);
+  je=byId("joineryTopMode");        if(je) je.value = j.top_mode||"aligned";
+  je=byId("joineryTopOverhang");    if(je) je.value = (j.top_overhang!=null?j.top_overhang:0);
+  je=byId("joinerySidesToFloor");   if(je) je.checked = !!j.sides_to_floor;
+  renderJoineryDiagram();
 }
 function readCfgFromForm(){
   var c = state.cfg;
@@ -841,6 +915,56 @@ function readCfgFromForm(){
   fr=byId("fita_name_thick"); if(fr) c.fita.name_thick = fr.value;
   fr=byId("fita_carcass");    if(fr) c.fita.carcass    = fr.value;
   fr=byId("fita_fronts");     if(fr) c.fita.fronts     = fr.value;
+  // Fixação lateral (side<->base/top joinery).
+  if(!c.joinery) c.joinery = {};
+  var jr;
+  jr=byId("joineryBottomMode");     if(jr) c.joinery.bottom_mode     = jr.value;
+  jr=byId("joineryBottomOverhang"); if(jr) c.joinery.bottom_overhang = parseFloat(jr.value)||0;
+  jr=byId("joineryTopMode");        if(jr) c.joinery.top_mode        = jr.value;
+  jr=byId("joineryTopOverhang");    if(jr) c.joinery.top_overhang    = parseFloat(jr.value)||0;
+  jr=byId("joinerySidesToFloor");   if(jr) c.joinery.sides_to_floor  = jr.checked;
+}
+
+/* Fixação lateral: redraw the schematic front elevation from the current modes
+   + overhangs, and enable the overhang field only where a junction is 'sobre
+   base'. Pure schematic (mm scaled against cfg.t); no dependency on Fusion. */
+function renderJoineryDiagram(){
+  var svg = byId("jnSvg"); if(!svg) return;
+  var c = state.cfg||{}, t = parseFloat(c.t)||18;
+  var hasKick = (c.with_toe_kick !== false);       // default: there is a toe kick
+  var bMode=(byId("joineryBottomMode")||{}).value||"aligned";
+  var tMode=(byId("joineryTopMode")||{}).value||"aligned";
+  var bOh=parseFloat((byId("joineryBottomOverhang")||{}).value)||0;
+  var tOh=parseFloat((byId("joineryTopOverhang")||{}).value)||0;
+  var s2f = !!((byId("joinerySidesToFloor")||{}).checked) && hasKick;
+  var X0=30, X1=210, SW=16, TH=20;                 // frame + panel thickness (svg units)
+  var TF=18, topBottomY=TF+TH;                     // top panel: face y .. bottom y
+  var baseBotY=236, baseTopY=baseBotY-TH;          // base panel top/bottom y
+  var floorY=284, kickTopY=baseBotY;               // toe-kick zone
+  function travel(oh){ return Math.max(0, Math.min(oh/t, 1.8))*TH; }  // side reach past inner face
+  var topX = (tMode==="over")?X0:(X0+SW), topW = (tMode==="over")?(X1-X0):(X1-X0-2*SW);
+  var baseX= (bMode==="over")?X0:(X0+SW), baseW= (bMode==="over")?(X1-X0):(X1-X0-2*SW);
+  var sideTopY = (tMode==="over")?(topBottomY-travel(tOh)):TF;
+  var sideBotY = s2f ? floorY : ((bMode==="over")?(baseTopY+travel(bOh)):baseBotY);
+  function setR(id,x,y,w,h){ var r=byId(id); if(r){ r.setAttribute("x",x); r.setAttribute("y",y);
+    r.setAttribute("width",Math.max(0,w)); r.setAttribute("height",Math.max(0,h)); } }
+  function show(id,on){ var e=byId(id); if(e) e.style.display = on?"":"none"; }
+  setR("jnTop", topX, TF, topW, TH);
+  setR("jnBase", baseX, baseTopY, baseW, TH);
+  setR("jnSideL", X0, sideTopY, SW, sideBotY-sideTopY);
+  setR("jnSideR", X1-SW, sideTopY, SW, sideBotY-sideTopY);
+  // Toe kick: full-width box under the sides (separate) OR recessed between the
+  // side legs when sides-to-floor. Hidden entirely when there is no toe kick.
+  show("jnKick", hasKick); show("jnFloor", hasKick); show("jnKickLbl", hasKick);
+  if (hasKick){
+    var kx = s2f ? (X0+SW) : X0, kw = s2f ? (X1-X0-2*SW) : (X1-X0);
+    setR("jnKick", kx, kickTopY, kw, floorY-kickTopY);
+  }
+  // overhang inputs live only for 'sobre base'; sides-to-floor toggle needs a kick
+  var tb=byId("jnTopOhBox"); if(tb) tb.classList.toggle("off", tMode!=="over");
+  var bb=byId("jnBotOhBox"); if(bb) bb.classList.toggle("off", bMode!=="over");
+  var s2fEl=byId("joinerySidesToFloor"); if(s2fEl) s2fEl.disabled = !hasKick;
+  var fh=byId("jnFloorHint"); if(fh) fh.style.opacity = hasKick ? "" : "0.5";
 }
 
 /* ---- small DOM helpers ------------------------------------------------------ */
@@ -1078,10 +1202,16 @@ function wizAdvance(){
 ============================================================================ */
 function bindForm(){
   // dimensions + structure + fronts + advanced -> re-read & re-render
-  var all = NUMS.concat(BOOLS, SELS, TEXTS, ["slide_key"], Object.keys(NESTED));
+  var all = NUMS.concat(BOOLS, SELS, TEXTS, ["slide_key"], Object.keys(NESTED),
+                        ["joineryBottomMode","joineryTopMode",
+                         "joineryBottomOverhang","joineryTopOverhang","joinerySidesToFloor"]);
   all.forEach(function(k){
     var el=byId(k);
     if (el) el.addEventListener("change", function(){ readCfgFromForm(); render(); });
+  });
+  // live diagram update while typing an overhang (the whole re-render happens on change)
+  ["joineryBottomOverhang","joineryTopOverhang","joineryBottomMode","joineryTopMode"].forEach(function(k){
+    var el=byId(k); if(el) el.addEventListener("input", function(){ readCfgFromForm(); renderJoineryDiagram(); });
   });
   // live highlight of the diagram while editing a dimension
   ["W","H","D","t"].forEach(function(k){
@@ -1134,7 +1264,7 @@ function bindForm(){
   // Hiding is cosmetic only — readCfgFromForm reads every field regardless.
   function applyAdvanced(){
     var on = byId("advancedMode").checked;
-    ["secStructure","secFronts","secFita","secAdvanced"].forEach(function(id){
+    ["secStructure","secJoinery","secFronts","secFita","secAdvanced"].forEach(function(id){
       var el = byId(id); if (el) el.style.display = on ? "" : "none";
     });
   }
@@ -1206,6 +1336,7 @@ function demoCfg(){
             back_height_reduction:0},
     fita:{name_thin:"Fita PVC 0.4mm Branco",name_thick:"Fita PVC 1mm Branco",
           carcass:"thin",fronts:"thick"},
+    joinery:{bottom_mode:"aligned",bottom_overhang:0,top_mode:"aligned",top_overhang:0,sides_to_floor:false},
     tol:{dado_bottom_clearance:0.5,dado_side_clearance:0.2,shelf_back_gap:1,
          shelf_front_setback:30,shelf_door_clearance:2},
     layout:{type:"shelves",count:3,inset:false,gap:null,shelf_align_front:null,

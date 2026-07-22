@@ -25,7 +25,7 @@ import math
 
 # Add-in version (keep in sync with FusionMob.manifest). Bump the patch digit
 # (last number) on every modification — see CLAUDE.md "Versioning".
-__version__ = '1.5.4'
+__version__ = '1.7.1'
 
 app = None
 ui = None
@@ -224,6 +224,39 @@ FITA = {
     'fronts':  'thick',   # doors + drawer faces (all 4) + toe-kick front
 }
 
+# Side<->base/top joinery (Fixacao Lateral, Promob's "Configurar Dimensoes").
+# Chooses, per junction (bottom base + top/tampo), how the side panels meet the
+# horizontal panel:
+#   'aligned' -> base/top captured BETWEEN the sides; the sides run full box
+#                height (today's behaviour, "Lateral alinhada com base").
+#   'over'    -> base/top run the FULL width and the side sits on/under them
+#                ("Lateral sobre base"). The overhang (mm) sets how far the side
+#                extends past the panel's inner face toward the panel's outer
+#                face: 0 = side rests on the base top / under the top bottom
+#                (Promob "auto"); == t = side flush with the base bottom / top
+#                top; > t = side skirts beyond the panel (Promob "fixo", e.g.
+#                50mm), clamped to the cabinet envelope (floor / overall height).
+# Deep-merged in normalize_cfg like HINGE/DRAWER/FITA. Both 'aligned' reproduces
+# the classic geometry exactly. The interior datums (base top face / top bottom
+# face) never move, so the region grid, back panel, shelves, doors, drawers and
+# hinges are unaffected; only the side Z-extent and the base/top width change.
+# v1 scope: vertical joinery only -- the depth-direction Folga/Alinhamento
+# (Promob F/G/H/I) is not modelled.
+JOINERY = {
+    'bottom_mode': 'aligned',   # 'aligned' | 'over'
+    'bottom_overhang': 0.0,     # mm, used only when bottom_mode == 'over'
+    'top_mode': 'aligned',      # 'aligned' | 'over'
+    'top_overhang': 0.0,        # mm, used only when top_mode == 'over'
+    # Toe-kick integration: when True (and there IS a toe kick), the side panels
+    # run all the way DOWN to the floor (Z=0), forming the cabinet legs (pes
+    # laterais), and the toe-kick front board + back rail + reinforcements span
+    # BETWEEN the sides (recessed at the front) with no separate end legs. When
+    # False (default) the sides stop at the base bottom (z_off) and the toe kick
+    # is a separate full-width box below them (today's behaviour). The base top
+    # face stays at z_off+tc either way, so the interior is unaffected.
+    'sides_to_floor': False,
+}
+
 
 def fita_tape(fita_cfg, group):
     """Resolve a fita group ('carcass'/'fronts') to its tape name, or '' when the
@@ -252,6 +285,24 @@ def _fita_choice_value(label):
         if lbl == label:
             return v
     return 'none'
+
+
+# Side<->base/top joinery modes (Fixacao Lateral). See JOINERY.
+JOINERY_CHOICES = [('aligned', 'Alinhada com base'), ('over', 'Sobre base')]
+
+
+def _joinery_choice_label(value):
+    for v, lbl in JOINERY_CHOICES:
+        if v == value:
+            return lbl
+    return JOINERY_CHOICES[0][1]
+
+
+def _joinery_choice_value(label):
+    for v, lbl in JOINERY_CHOICES:
+        if lbl == label:
+            return v
+    return 'aligned'
 
 
 def _fita_value_for(name, thin_name, thick_name):
@@ -319,6 +370,9 @@ DEFAULT_CFG = {
     # normalize_cfg. The legacy 'door_band'/'drawer.face_band' keys are ignored on
     # build now that fronts source their tape from this block.
     'fita': dict(FITA),
+    # Side<->base/top joinery (Fixacao Lateral). Both 'aligned' = today's
+    # geometry (base/top between full-height sides). See JOINERY / build_cabinet.
+    'joinery': dict(JOINERY),
     # Interior LAYOUT. None is a sentinel meaning "derive a single-region layout
     # from the flat fields above" (see normalize_cfg / _synthesize_layout_from_flat)
     # so old stored cabinets and the classic New/Edit dialog keep working. The
@@ -327,6 +381,16 @@ DEFAULT_CFG = {
     # LEAF {'type':'open'|'shelves'|'doors'|'drawers', count, inset, ...}. When a
     # layout is present it is authoritative for the build. See build_region.
     'layout': None,
+    # Per-panel edge-banding (fita) overrides, keyed by the panel's stable slot
+    # name (e.g. 'Base', 'Prateleira 1', 'Gaveta 2 Frente'). Each value is a dict
+    # of the four {fita_C1,fita_C2,fita_L1,fita_L2} tape names. Written by Edit
+    # Panel and re-applied on every rebuild so per-body tape choices survive the
+    # delete-and-rebuild edit flow (see _apply_panel_override). Empty by default.
+    'panel_overrides': {},
+    # Stable per-cabinet prefix for the Fusion User Parameters this cabinet
+    # publishes (fmob_<prefix>_W, ...). Assigned once at first build and reused so
+    # rebuilds update the same named params instead of colliding across cabinets.
+    'param_prefix': None,
 }
 
 # Icon resources live next to this script (resources/<name>/16x16.png + 32x32.png).
@@ -623,6 +687,28 @@ def _make_temp_cylinder(tbm, x0, y0, z0, x1, y1, z1, radius):
     return tbm.createCylinderOrCone(p0, radius, p1, radius)
 
 
+# Per-panel edge-banding overrides for the cabinet currently being built, keyed
+# by panel slot name. Set by build_cabinet from cfg['panel_overrides'] and read
+# by add_solid_panel/add_solid_body so a rebuild re-applies the tape choices Edit
+# Panel made on individual bodies. Empty outside a build.
+_ACTIVE_PANEL_OVERRIDES = {}
+
+
+def _apply_panel_override(data, name, overrides):
+    """Overwrite the four fita_* fields of a cut-list `data` dict in place from
+    `overrides[name]` when present. `overrides` is cfg['panel_overrides'] (slot
+    name -> {fita_C1,fita_C2,fita_L1,fita_L2}). No-op when there's no matching
+    override or `data` is None. Returns `data`."""
+    if not overrides or data is None:
+        return data
+    ov = overrides.get(name)
+    if isinstance(ov, dict):
+        for k in ('fita_C1', 'fita_C2', 'fita_L1', 'fita_L2'):
+            if k in ov:
+                data[k] = ov[k]
+    return data
+
+
 def add_solid_panel(cabinet_comp, name, box, data, grooves=None, holes=None):
     """Create a panel as an exact solid box (minus optional groove boxes and
     cylindrical holes) in its own component. `box` and each groove are
@@ -650,6 +736,7 @@ def add_solid_panel(cabinet_comp, name, box, data, grooves=None, holes=None):
     base.finishEdit()
 
     real.name = name
+    _apply_panel_override(data, name, _ACTIVE_PANEL_OVERRIDES)
     real.attributes.add(ATTR_GROUP, ATTR_NAME, json.dumps(data))
     return occ
 
@@ -990,6 +1077,7 @@ def add_solid_body(comp, name, box, data=None, grooves=None, holes=None):
     base.finishEdit()
     real.name = name
     if data is not None:
+        _apply_panel_override(data, name, _ACTIVE_PANEL_OVERRIDES)
         real.attributes.add(ATTR_GROUP, ATTR_NAME, json.dumps(data))
     return real
 
@@ -1600,6 +1688,153 @@ def build_region_leaf(band, node, ctx, prefix):
     # 'open' -> nothing
 
 
+# Cabinet dimensions mirrored to Fusion User Parameters. Lengths (mm) go in the
+# first list, plain counts (unitless) in the second. Curated on purpose — not the
+# whole cfg.
+_USER_PARAM_MM_FIELDS = ('W', 'H', 'D', 't', 'back_t', 'dado_depth', 'back_setback',
+                         'toe_kick_t', 'toe_kick_height', 'toe_kick_setback',
+                         'door_t', 'door_gap', 'drawer_gap')
+_USER_PARAM_COUNT_FIELDS = ('n_shelves', 'n_doors', 'n_drawers')
+_USER_PARAM_COMMENT = ('FusionMob managed (informacional). Edite via FusionMob > '
+                       'Editar Armario; alterar este valor aqui nao tem efeito.')
+
+
+def _next_param_prefix(design):
+    """Lowest 'c<N>' prefix not already used by a published parameter set, so a new
+    cabinet never reuses a living cabinet's parameter names (occurrence count would
+    collide after a deletion). Falls back to 'c1' if userParameters is unavailable."""
+    try:
+        params = design.userParameters
+    except Exception:
+        return 'c1'
+    n = 1
+    while n < 100000:
+        if not params.itemByName('fmob_c{0}_W'.format(n)):
+            return 'c{0}'.format(n)
+        n += 1
+    return 'c{0}'.format(n)
+
+
+def publish_user_parameters(design, cfg):
+    """Mirror this cabinet's key dimensions to named Fusion User Parameters, so the
+    model reads as parametric in the Parameters table. Names are prefixed per
+    cabinet (fmob_<param_prefix>_<field>) to avoid collisions between cabinets in
+    one document. Values are INFORMATIONAL: the geometry is static base features,
+    so editing them here drives nothing (the stamped comment says so). Never
+    raises — a parameter that can't be created/updated is just skipped."""
+    try:
+        params = design.userParameters
+    except Exception:
+        return
+    prefix = cfg.get('param_prefix') or 'c1'
+
+    def _set(name, expr, units):
+        try:
+            p = params.itemByName(name)
+            if p:
+                p.expression = expr
+                try:
+                    p.comment = _USER_PARAM_COMMENT
+                except Exception:
+                    pass
+            else:
+                params.add(name, adsk.core.ValueInput.createByString(expr),
+                           units, _USER_PARAM_COMMENT)
+        except Exception:
+            pass
+
+    for f in _USER_PARAM_MM_FIELDS:
+        try:
+            v = float(cfg.get(f))
+        except (TypeError, ValueError):
+            continue
+        _set('fmob_{0}_{1}'.format(prefix, f), '{0} mm'.format(v), 'mm')
+    for f in _USER_PARAM_COUNT_FIELDS:
+        try:
+            v = int(cfg.get(f))
+        except (TypeError, ValueError):
+            continue
+        _set('fmob_{0}_{1}'.format(prefix, f), str(v), '')
+
+
+def _iter_cabinet_bodies(occ):
+    """Yield every BRepBody under a cabinet occurrence — its own component plus all
+    nested child components (carcass panels, toe kick, doors, drawer bodies).
+    Guarded so a malformed tree can't raise."""
+    stack = [occ]
+    while stack:
+        o = stack.pop()
+        try:
+            comp = o.component
+        except Exception:
+            continue
+        try:
+            for b in comp.bRepBodies:
+                yield b
+        except Exception:
+            pass
+        try:
+            for child in o.childOccurrences:
+                stack.append(child)
+        except Exception:
+            pass
+
+
+def capture_cabinet_state(occ):
+    """Snapshot the state a delete-and-rebuild would otherwise lose: user-applied
+    body appearance overrides, keyed by body name (the stable panel slot key).
+    `body.appearance` reads None when the body just inherits, so only explicit
+    overrides are captured. Returns {'appearances': {name: appearance}}. Never
+    raises."""
+    appearances = {}
+    try:
+        for body in _iter_cabinet_bodies(occ):
+            try:
+                ap = body.appearance
+            except Exception:
+                ap = None
+            if ap is not None and body.name:
+                appearances[body.name] = ap
+    except Exception:
+        pass
+    return {'appearances': appearances}
+
+
+def restore_cabinet_state(occ, state):
+    """Re-apply a capture_cabinet_state snapshot onto a rebuilt cabinet, matching
+    bodies by name. Bodies whose slot no longer exists (topology changed) are
+    simply skipped. Never raises."""
+    if not occ or not state:
+        return
+    appearances = state.get('appearances') or {}
+    if not appearances:
+        return
+    try:
+        for body in _iter_cabinet_bodies(occ):
+            ap = appearances.get(body.name)
+            if ap is not None:
+                try:
+                    body.appearance = ap
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+def _carry_forward_cabinet_cfg(new_cfg, old_cfg):
+    """Copy state the edit dialogs/palette don't round-trip — the published
+    parameter prefix and the per-panel fita overrides — from a cabinet's previous
+    cfg into the edited cfg, so a rebuild keeps its parameter names and Edit Panel
+    tape choices. Incoming non-empty values win. Returns new_cfg."""
+    if not isinstance(old_cfg, dict):
+        return new_cfg
+    if not new_cfg.get('param_prefix') and old_cfg.get('param_prefix'):
+        new_cfg['param_prefix'] = old_cfg['param_prefix']
+    if not new_cfg.get('panel_overrides') and isinstance(old_cfg.get('panel_overrides'), dict):
+        new_cfg['panel_overrides'] = dict(old_cfg['panel_overrides'])
+    return new_cfg
+
+
 def build_cabinet(design, cfg, translation=None):
     """Build the carcass as one assembly of per-panel components from a config
     dict (all lengths in mm). Stores the config on the cabinet component so it
@@ -1608,6 +1843,10 @@ def build_cabinet(design, cfg, translation=None):
     Returns (part_count, assembly_status, warnings) where warnings is a list of
     non-fatal notes (e.g. a hinge that couldn't be moved clear of a shelf)."""
     cfg = normalize_cfg(cfg)   # fill defaults + synthesize/normalize the layout
+    # Per-panel fita overrides re-applied inside add_solid_panel/add_solid_body as
+    # each tagged body is created (see _apply_panel_override).
+    global _ACTIVE_PANEL_OVERRIDES
+    _ACTIVE_PANEL_OVERRIDES = cfg.get('panel_overrides') or {}
     W, H, D, t = cfg['W'], cfg['H'], cfg['D'], cfg['t']
     n_shelves, material = cfg['n_shelves'], cfg['material']
     shelf_align_front = cfg.get('shelf_align_front', False)
@@ -1624,6 +1863,7 @@ def build_cabinet(design, cfg, translation=None):
     with_hinges = with_doors and cfg['with_hinges']
     hinge = cfg.get('hinge', HINGE)
     tol = cfg['tol']
+    joinery = cfg.get('joinery', JOINERY)
     # Edge banding tapes for this build (see FITA / fita_tape). '' when a group
     # is off. 'carcass' bands the front edge of sides/base/top/shelves/dividers;
     # 'fronts' bands doors/faces (all four) and the toe-kick front board.
@@ -1663,6 +1903,19 @@ def build_cabinet(design, cfg, translation=None):
     if translation is None:
         idx = root.occurrences.count
         translation = ((Wc + 10.0) * idx, 0.0, 0.0)
+    # Stable per-cabinet prefix for the published user parameters, assigned once
+    # and carried in cfg so rebuilds update the same params (see the edit handlers,
+    # which carry it forward from the old cfg).
+    if not cfg.get('param_prefix'):
+        cfg['param_prefix'] = _next_param_prefix(design)
+    # Timeline group start (parametric designs only) so the whole build collapses
+    # into one named group. None disables grouping (direct-modeling docs).
+    tl_start = None
+    try:
+        if design.designType == adsk.fusion.DesignTypes.ParametricDesignType:
+            tl_start = design.timeline.count
+    except Exception:
+        tl_start = None
     cab_transform = adsk.core.Matrix3D.create()
     cab_transform.translation = adsk.core.Vector3D.create(
         translation[0], translation[1], translation[2])
@@ -1670,9 +1923,70 @@ def build_cabinet(design, cfg, translation=None):
     cabinet_comp = cabinet_occ.component
     cabinet_comp.name = 'Cabinet {0}x{1}x{2}'.format(int(W), int(H), int(D))
     cabinet_comp.attributes.add(ATTR_GROUP, CABINET_CFG_ATTR, json.dumps(cfg))
+    publish_user_parameters(design, cfg)
 
     inner_w = W - 2 * t  # clear width between the sides (mm)
     warnings = []
+
+    # --- Side<->base/top joinery (Fixacao Lateral) --------------------------
+    # Per junction: 'aligned' captures the horizontal panel BETWEEN full-height
+    # sides (today's geometry); 'over' runs the base/top the FULL width with the
+    # side sitting on/under it. The interior datums (base top face z_off+tc, top
+    # bottom face z_off+Hbox_c-tc) NEVER move, so only the side Z-extent and the
+    # base/top width change here -- the region grid, back panel and hardware are
+    # untouched. Overhang (mm) is how far the side reaches past the panel's inner
+    # face toward its outer face: 0 = side rests on the base top / under the top;
+    # == t = side flush with the base bottom / top top; > t = side skirts beyond
+    # the panel (clamped to the floor at the bottom).
+    bottom_over = joinery.get('bottom_mode') == 'over'
+    top_over = joinery.get('top_mode') == 'over'
+    # Sides-to-floor: the side legs run down to Z=0 through the toe-kick zone.
+    # Only meaningful when there IS a kick to span (else the side already sits on
+    # the floor at z_off=0).
+    sides_to_floor = bool(joinery.get('sides_to_floor', False)) and with_toe_kick and kick_h > 0
+    side_z0 = z_off
+    if bottom_over:
+        side_z0 = z_off + tc - max(0.0, float(joinery.get('bottom_overhang', 0.0))) / 10.0
+        if side_z0 < 0.0:
+            side_z0 = 0.0
+            warnings.append('Fixacao lateral (base): avanco maior que o espaco '
+                            'disponivel; a lateral foi limitada ao piso.')
+    if sides_to_floor:
+        side_z0 = 0.0   # legs reach the floor; base top face (z_off+tc) is unchanged
+    side_z1 = z_off + Hbox_c
+    if top_over:
+        side_z1 = z_off + Hbox_c - tc + max(0.0, float(joinery.get('top_overhang', 0.0))) / 10.0
+    side_len_mm = (side_z1 - side_z0) * 10.0
+    # Base/top X placement: full width in 'over', else captured between the sides.
+    base_x0_c = 0.0 if bottom_over else tc
+    base_w_c = Wc if bottom_over else (Wc - 2 * tc)
+    base_dim_a = W if bottom_over else inner_w
+    top_x0_c = 0.0 if top_over else tc
+    top_w_c = Wc if top_over else (Wc - 2 * tc)
+    top_dim_a = W if top_over else inner_w
+    # Where a full-width panel and the side skirt would share volume (the side
+    # descends past the base top / rises past the top bottom by the overhang), cut
+    # a matching end-rebate (rebaixo) into the panel so the parts stay flush with
+    # NO interference. CorteCloud has no usinagem field, so the rebate depth is
+    # noted in Complemento (same convention as hinge/slide furacao). Each notch is
+    # an (x0,y0,z0,dx,dy,dz) cm box at the two ends, spanning the full depth.
+    base_notches = []
+    base_note = 'Base'
+    if bottom_over:
+        nz0 = max(side_z0, z_off)
+        ndz = (z_off + tc) - nz0
+        if ndz > 1e-4:
+            base_notches = [(0.0, 0.0, nz0, tc, Dc, ndz), (Wc - tc, 0.0, nz0, tc, Dc, ndz)]
+            base_note = 'Base (rebaixo lateral {0:.0f}mm nas pontas)'.format(ndz * 10.0)
+    top_notches = []
+    top_note = 'Tampo'
+    if top_over:
+        ntz1 = min(side_z1, z_off + Hbox_c)
+        ntz0 = z_off + Hbox_c - tc
+        ndzt = ntz1 - ntz0
+        if ndzt > 1e-4:
+            top_notches = [(0.0, 0.0, ntz0, tc, Dc, ndzt), (Wc - tc, 0.0, ntz0, tc, Dc, ndzt)]
+            top_note = 'Tampo (rebaixo lateral {0:.0f}mm nas pontas)'.format(ndzt * 10.0)
 
     # Organise the model into sub-assemblies under the cabinet: the carcass box
     # (Corpo), the toe kick (Rodape), and one component per drawer (Gaveta N).
@@ -1708,15 +2022,20 @@ def build_cabinet(design, cfg, translation=None):
     # boxes and interior dividers all stop at (or just short of) this plane.
     back_front_y = (D - back_setback - back_t) if with_back else D
 
-    # Base and top: captured between the sides, thickness along Z. The SIDES are
-    # created later (after the interior walk) because door hinge plates bore into
-    # them and those hole positions are only known once the regions are laid out.
-    add_panel('Base', (tc, 0.0, z_off, Wc - 2 * tc, Dc, tc),
-              make_panel_data('Base', 'Base', inner_w, D, material,
-                              bands={'a': (fita_carcass, '')}), base_g)
-    add_panel('Tampo', (tc, 0.0, z_off + Hbox_c - tc, Wc - 2 * tc, Dc, tc),
-              make_panel_data('Tampo', 'Tampo', inner_w, D, material,
-                              bands={'a': (fita_carcass, '')}), top_g)
+    # Base and top: captured between the sides ('aligned') or running the full
+    # width ('over'); see the joinery block above. Thickness runs along Z; their
+    # inner/outer faces (base top, top bottom) are the invariant interior datums.
+    # The SIDES are created later (after the interior walk) because door hinge
+    # plates bore into them and those hole positions are only known once the
+    # regions are laid out.
+    base_grooves = (base_g or []) + base_notches
+    top_grooves = (top_g or []) + top_notches
+    add_panel('Base', (base_x0_c, 0.0, z_off, base_w_c, Dc, tc),
+              make_panel_data('Base', base_note, base_dim_a, D, material,
+                              bands={'a': (fita_carcass, '')}), base_grooves or None)
+    add_panel('Tampo', (top_x0_c, 0.0, z_off + Hbox_c - tc, top_w_c, Dc, tc),
+              make_panel_data('Tampo', top_note, top_dim_a, D, material,
+                              bands={'a': (fita_carcass, '')}), top_grooves or None)
 
     # Back panel: reaches 'engage' (= dd - bottom clearance) into all four grooves.
     if with_back:
@@ -1754,27 +2073,36 @@ def build_cabinet(design, cfg, translation=None):
         def add_kick(name, box, data):
             kick_occs.append(add_solid_panel(kick_comp, name, box, data))
 
-        # Front (visible) board + back rail, both spanning the full width.
-        add_kick('Rodape Frente', (0.0, s_c, 0.0, Wc, kt_c, kh_c),
-                 make_panel_data('Rodape', 'Rodape Frente', W, toe_kick_height, toe_kick_material,
+        # Front (visible) board + back rail. With sides-to-floor the cabinet
+        # sides ARE the legs, so the boards span BETWEEN them (recessed) and there
+        # are no end connectors; otherwise both span the full width.
+        board_x0 = tc if sides_to_floor else 0.0
+        board_w_c = (Wc - 2 * tc) if sides_to_floor else Wc
+        board_w_mm = inner_w if sides_to_floor else W
+        add_kick('Rodape Frente', (board_x0, s_c, 0.0, board_w_c, kt_c, kh_c),
+                 make_panel_data('Rodape', 'Rodape Frente', board_w_mm, toe_kick_height, toe_kick_material,
                                  bands={'a': (fita_front, '')}))
-        add_kick('Rodape Traseira', (0.0, conn_y1, 0.0, Wc, kt_c, kh_c),
-                 make_panel_data('Travessa', 'Rodape Traseira', W, toe_kick_height, toe_kick_material))
+        add_kick('Rodape Traseira', (board_x0, conn_y1, 0.0, board_w_c, kt_c, kh_c),
+                 make_panel_data('Travessa', 'Rodape Traseira', board_w_mm, toe_kick_height, toe_kick_material))
 
         def add_kick_conn(name, x0):
             add_kick(name, (x0, conn_y0, 0.0, kt_c, conn_len_c, kh_c),
                      make_panel_data('Travessa', name, conn_len_mm, toe_kick_height, toe_kick_material))
 
-        # End connectors, then interior reinforcements dividing the clear width
-        # into equal bays no wider than toe_kick_max_span.
-        add_kick_conn('Rodape Lateral E', 0.0)
-        add_kick_conn('Rodape Lateral D', Wc - kt_c)
-
-        clear_w = W - 2 * toe_kick_t                 # between the two end connectors
+        # End connectors only when the kick is a standalone box (sides stop at the
+        # base); with sides-to-floor the cabinet sides already close the ends.
+        # Then interior reinforcements divide the clear span into equal bays no
+        # wider than toe_kick_max_span.
+        if sides_to_floor:
+            rx0, rx1, clear_w = tc, Wc - tc, inner_w          # between the side legs
+        else:
+            add_kick_conn('Rodape Lateral E', 0.0)
+            add_kick_conn('Rodape Lateral D', Wc - kt_c)
+            rx0, rx1, clear_w = kt_c, Wc - kt_c, W - 2 * toe_kick_t   # between end connectors
         n_bays = max(1, int(math.ceil(clear_w / toe_kick_max_span)))
-        span_c = Wc - 2 * kt_c
+        span_c = rx1 - rx0
         for j in range(1, n_bays):
-            cx = kt_c + j * (span_c / n_bays) - kt_c / 2.0
+            cx = rx0 + j * (span_c / n_bays) - kt_c / 2.0
             add_kick_conn('Rodape Reforco {0}'.format(j), cx)
 
     # ---- Interior: recursive region grid ----------------------------------
@@ -1839,14 +2167,17 @@ def build_cabinet(design, cfg, translation=None):
                                   bands={'a': (fita_carcass, '')}),
                   None, holes)
 
-    # Sides LAST: full box height x depth, thickness along X, with the back
-    # grooves and any accumulated hinge plate holes. (anchor stays the Corpo occ.)
-    add_panel('Lateral Esquerda', (0.0, 0.0, z_off, tc, Dc, Hbox_c),
-              make_panel_data('Lateral', 'Lateral Esquerda', Hbox, D, material,
+    # Sides LAST: from side_z0 to side_z1 (set by the joinery mode) x depth,
+    # thickness along X, with the back grooves and any accumulated hinge plate
+    # holes. (anchor stays the Corpo occ.) In 'aligned' mode this is the full box
+    # height (side_z0=z_off, side_z1=z_off+Hbox_c) exactly as before.
+    side_dz_c = side_z1 - side_z0
+    add_panel('Lateral Esquerda', (0.0, 0.0, side_z0, tc, Dc, side_dz_c),
+              make_panel_data('Lateral', 'Lateral Esquerda', side_len_mm, D, material,
                               bands={'a': (fita_carcass, '')}),
               left_g, ctx.hole_map.get('L'))
-    add_panel('Lateral Direita', (Wc - tc, 0.0, z_off, tc, Dc, Hbox_c),
-              make_panel_data('Lateral', 'Lateral Direita', Hbox, D, material,
+    add_panel('Lateral Direita', (Wc - tc, 0.0, side_z0, tc, Dc, side_dz_c),
+              make_panel_data('Lateral', 'Lateral Direita', side_len_mm, D, material,
                               bands={'a': (fita_carcass, '')}),
               right_g, ctx.hole_map.get('R'))
 
@@ -1894,6 +2225,22 @@ def build_cabinet(design, cfg, translation=None):
         except Exception:
             pass
 
+    # Collapse this cabinet's timeline features into one named group so the build
+    # reads as a single unit. Best-effort: a range that can't be grouped is left
+    # ungrouped rather than failing the build.
+    if tl_start is not None:
+        try:
+            tl_end = design.timeline.count - 1
+            if tl_end >= tl_start:
+                grp = design.timeline.timelineGroups.add(tl_start, tl_end)
+                try:
+                    grp.name = 'FusionMob ' + cabinet_comp.name
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    _ACTIVE_PANEL_OVERRIDES = {}
     return part_count, status, warnings
 
 
@@ -1986,7 +2333,7 @@ def _normalize_layout_node(node):
 def normalize_cfg(cfg):
     """Fill any missing keys from the defaults (robust to older stored configs)."""
     out = dict(DEFAULT_CFG)
-    out.update({k: cfg[k] for k in cfg if k not in ('tol', 'hinge', 'drawer', 'fita', 'layout')})
+    out.update({k: cfg[k] for k in cfg if k not in ('tol', 'hinge', 'drawer', 'fita', 'joinery', 'layout')})
     tol = dict(DEFAULT_TOL)
     if isinstance(cfg.get('tol'), dict):
         tol.update(cfg['tol'])
@@ -2003,6 +2350,14 @@ def normalize_cfg(cfg):
     if isinstance(cfg.get('fita'), dict):
         fita.update(cfg['fita'])
     out['fita'] = fita
+    joinery = dict(JOINERY)
+    if isinstance(cfg.get('joinery'), dict):
+        joinery.update(cfg['joinery'])
+    out['joinery'] = joinery
+    # Per-panel fita overrides: always a fresh dict so we never alias the shared
+    # DEFAULT_CFG default across cabinets.
+    po = cfg.get('panel_overrides')
+    out['panel_overrides'] = dict(po) if isinstance(po, dict) else {}
     # Layout: synthesize a single region from the flat fields when absent (old
     # configs / classic dialog); otherwise deep-fill the explicit tree.
     lay = cfg.get('layout')
@@ -2024,7 +2379,7 @@ def _select_dropdown(dd, name):
 # purely cosmetic: read_cabinet_inputs reads each input by id regardless of
 # visibility, so the (default or loaded) values still drive the build.
 _CABINET_ADVANCED_IDS = ('thickness', 'shelfAlignFront', 'backGroup', 'toeKickGroup',
-                         'doorGroup', 'drawerGroup', 'fitaGroup', 'advGroup')
+                         'doorGroup', 'drawerGroup', 'joineryGroup', 'fitaGroup', 'advGroup')
 
 
 def _apply_cabinet_advanced_visibility(inputs, visible):
@@ -2134,6 +2489,30 @@ def add_cabinet_inputs(inputs, cfg):
         face_mat.listItems.item(0).isSelected = True
     dw.addBoolValueInput('insertRealHardware', 'Inserir modelo 3D da corredica',
                          True, '', bool(cfg['insert_real_hardware']))
+
+    # Side<->base/top joinery (Fixacao Lateral). Per junction: base/top captured
+    # between full-height sides ('Alinhada com base', today) or full-width with
+    # the side sitting on/under it ('Sobre base'), plus an overhang (avanco). The
+    # visual editor for this lives in the Cabinet Layout palette; here it's plain
+    # inputs, gated behind Configuracao avancada.
+    joinery = cfg.get('joinery', JOINERY)
+    jn_group = inputs.addGroupCommandInput('joineryGroup', 'Fixacao lateral')
+    jn_group.isExpanded = False
+    jg = jn_group.children
+    jbm = jg.addDropDownCommandInput(
+        'joineryBottomMode', 'Base inferior', adsk.core.DropDownStyles.TextListDropDownStyle)
+    for (_v, _lbl) in JOINERY_CHOICES:
+        jbm.listItems.add(_lbl, _v == joinery.get('bottom_mode', 'aligned'))
+    jg.addValueInput('joineryBottomOverhang', 'Base inf.: avanco da lateral', 'mm',
+                     adsk.core.ValueInput.createByReal(float(joinery.get('bottom_overhang', 0.0)) / 10.0))
+    jtm = jg.addDropDownCommandInput(
+        'joineryTopMode', 'Base superior (tampo)', adsk.core.DropDownStyles.TextListDropDownStyle)
+    for (_v, _lbl) in JOINERY_CHOICES:
+        jtm.listItems.add(_lbl, _v == joinery.get('top_mode', 'aligned'))
+    jg.addValueInput('joineryTopOverhang', 'Tampo: avanco da lateral', 'mm',
+                     adsk.core.ValueInput.createByReal(float(joinery.get('top_overhang', 0.0)) / 10.0))
+    jg.addBoolValueInput('joinerySidesToFloor', 'Laterais ate o piso (pes laterais)',
+                         True, '', bool(joinery.get('sides_to_floor', False)))
 
     # Edge banding (fita) — its own group (not buried in Advanced), since which
     # edges get taped and how thick is a primary cut-list decision. Two editable
@@ -2254,6 +2633,13 @@ def read_cabinet_inputs(inputs):
             'carcass': _fita_choice_value(inputs.itemById('fitaCarcass').selectedItem.name),
             'fronts': _fita_choice_value(inputs.itemById('fitaFronts').selectedItem.name),
         },
+        'joinery': {
+            'bottom_mode': _joinery_choice_value(inputs.itemById('joineryBottomMode').selectedItem.name),
+            'bottom_overhang': inputs.itemById('joineryBottomOverhang').value * 10.0,
+            'top_mode': _joinery_choice_value(inputs.itemById('joineryTopMode').selectedItem.name),
+            'top_overhang': inputs.itemById('joineryTopOverhang').value * 10.0,
+            'sides_to_floor': inputs.itemById('joinerySidesToFloor').value,
+        },
     }
 
 
@@ -2310,6 +2696,14 @@ def write_cabinet_inputs(inputs, cfg):
     inputs.itemById('fitaThick').value = fita['name_thick']
     _select_dropdown(inputs.itemById('fitaCarcass'), _fita_choice_label(fita['carcass']))
     _select_dropdown(inputs.itemById('fitaFronts'), _fita_choice_label(fita['fronts']))
+    joinery = cfg.get('joinery', JOINERY)
+    _select_dropdown(inputs.itemById('joineryBottomMode'),
+                     _joinery_choice_label(joinery.get('bottom_mode', 'aligned')))
+    inputs.itemById('joineryBottomOverhang').value = float(joinery.get('bottom_overhang', 0.0)) / 10.0
+    _select_dropdown(inputs.itemById('joineryTopMode'),
+                     _joinery_choice_label(joinery.get('top_mode', 'aligned')))
+    inputs.itemById('joineryTopOverhang').value = float(joinery.get('top_overhang', 0.0)) / 10.0
+    inputs.itemById('joinerySidesToFloor').value = bool(joinery.get('sides_to_floor', False))
 
 
 def validate_cfg(cfg):
@@ -2346,6 +2740,13 @@ def validate_cfg(cfg):
                     '(recuo + 2x espessura) must be less than the profundidade.')
         if kms <= 0:
             return 'Vao max. sem reforco do rodape must be greater than 0.'
+    # Side<->base/top joinery (Fixacao Lateral): valid modes + non-negative overhangs.
+    jn = cfg['joinery']
+    for side in ('bottom', 'top'):
+        if jn.get(side + '_mode') not in ('aligned', 'over'):
+            return "Fixacao lateral: modo invalido (use 'aligned' ou 'over')."
+        if float(jn.get(side + '_overhang', 0.0)) < 0:
+            return 'Fixacao lateral: o avanco (overhang) deve ser >= 0.'
     # Interior layout: walk the region tree (same planner the builder uses, so a
     # split that validates always builds) and check that each leaf fits its band.
     kick_h = cfg['toe_kick_height'] if cfg['with_toe_kick'] else 0.0
@@ -2637,6 +3038,11 @@ class EditCabinetExecuteHandler(adsk.core.CommandEventHandler):
                 ui.messageBox(err)
                 return
 
+            # Carry forward state the dialog doesn't round-trip (parameter prefix,
+            # per-panel fita overrides) and snapshot appearances before deleting.
+            _carry_forward_cabinet_cfg(cfg, _old_cfg)
+            state = capture_cabinet_state(occ)
+
             # Keep the cabinet in its current spot: reuse its position, then
             # delete the old assembly and rebuild from the edited config.
             try:
@@ -2644,12 +3050,15 @@ class EditCabinetExecuteHandler(adsk.core.CommandEventHandler):
                 translation = (v.x, v.y, v.z)
             except:
                 translation = None
+            before = _root_tokens(design)
             try:
                 occ.deleteMe()
             except:
                 pass
 
             _count, status, warnings = build_cabinet(design, cfg, translation)
+            new_occ = _find_occ_by_token(design, _new_root_token(design, before))
+            restore_cabinet_state(new_occ, state)
             notes = list(warnings)
             if status == 'none':
                 notes.append('The panels could not be connected automatically. '
@@ -2900,6 +3309,10 @@ class EditPanelExecuteHandler(adsk.core.CommandEventHandler):
                 'fita_L2': names[_fita_choice_value(inputs.itemById('epL2').selectedItem.name)],
             }
             updated = 0
+            # Also record each override in its owning cabinet's stored cfg
+            # (keyed by body name) so it survives a rebuild. Accumulate per
+            # cabinet occurrence so we rewrite each cfg attribute only once.
+            cab_overrides = {}   # cabinet occ -> {body_name: chosen}
             for i in range(sel.selectionCount):
                 body = sel.selection(i).entity
                 data = _read_panel_data(body)
@@ -2908,6 +3321,23 @@ class EditPanelExecuteHandler(adsk.core.CommandEventHandler):
                 data.update(chosen)
                 body.attributes.add(ATTR_GROUP, ATTR_NAME, json.dumps(data))
                 updated += 1
+                try:
+                    cab = _cabinet_occ_from_entity(body)
+                    if cab and body.name:
+                        cab_overrides.setdefault(cab, {})[body.name] = dict(chosen)
+                except Exception:
+                    pass
+            for cab, per_body in cab_overrides.items():
+                try:
+                    attr = cab.component.attributes.itemByName(ATTR_GROUP, CABINET_CFG_ATTR)
+                    if not (attr and attr.value):
+                        continue
+                    cfg = normalize_cfg(json.loads(attr.value))
+                    ov = cfg.setdefault('panel_overrides', {})
+                    ov.update(per_body)
+                    cab.component.attributes.add(ATTR_GROUP, CABINET_CFG_ATTR, json.dumps(cfg))
+                except Exception:
+                    pass
             if updated == 0:
                 ui.messageBox('No FusionMob panels were updated (select tagged bodies).')
         except:
@@ -3086,9 +3516,20 @@ def _palette_apply(design, data):
         return {'ok': False, 'error': err}
     token = data.get('id')
     translation = None
+    state = None
     if token and token != 'new':
         occ = _find_occ_by_token(design, token)
         if occ:
+            # Carry forward parameter prefix + fita overrides from the stored cfg
+            # (the palette's edited tree doesn't round-trip them) and snapshot
+            # appearances before deleting.
+            attr = occ.component.attributes.itemByName(ATTR_GROUP, CABINET_CFG_ATTR)
+            if attr and attr.value:
+                try:
+                    _carry_forward_cabinet_cfg(cfg, normalize_cfg(json.loads(attr.value)))
+                except (ValueError, TypeError):
+                    pass
+            state = capture_cabinet_state(occ)
             try:
                 v = occ.transform.translation
                 translation = (v.x, v.y, v.z)
@@ -3100,8 +3541,11 @@ def _palette_apply(design, data):
                 pass
     before = _root_tokens(design)
     _count, status, warnings = build_cabinet(design, cfg, translation)
+    new_token = _new_root_token(design, before)
+    if state:
+        restore_cabinet_state(_find_occ_by_token(design, new_token), state)
     return {'ok': True, 'status': status, 'warnings': list(warnings),
-            'id': _new_root_token(design, before), 'cabinets': _cabinet_list(design)}
+            'id': new_token, 'cabinets': _cabinet_list(design)}
 
 
 class LayoutPaletteHTMLHandler(adsk.core.HTMLEventHandler):
