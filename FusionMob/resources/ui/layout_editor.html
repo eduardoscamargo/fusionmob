@@ -139,7 +139,7 @@
   .leaf-label { font-weight:600; pointer-events:none; }
 
   /* ---- type picker tiles ---- */
-  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:6px 0 4px; }
+  .tiles { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin:6px 0 4px; }
   .tile { border:1px solid var(--line-2); border-radius:6px; background:#2c2c2c; cursor:pointer;
           padding:8px 4px 6px; text-align:center; color:var(--muted); transition:.12s; }
   .tile:hover { border-color:#777; color:var(--ink); }
@@ -223,6 +223,41 @@
                  font-size:12px; text-align:right; outline:none; }
   .jn-oh .unit { font-size:10px; color:var(--muted); }
   .jn-oh.off { opacity:.35; pointer-events:none; }
+
+  /* Inline help: a small "i" badge next to a label/option, with a floating
+     tooltip (rendered on <body> so it is never clipped by overflow:hidden). */
+  .info { display:inline-flex; align-items:center; justify-content:center;
+          width:14px; height:14px; margin-left:5px; flex:0 0 auto; cursor:help;
+          border:1px solid var(--line-2); border-radius:50%; color:var(--muted);
+          font:italic 700 9px Georgia,"Times New Roman",serif; user-select:none;
+          vertical-align:middle; transition:.12s; }
+  .info:hover, .info:focus { border-color:var(--accent); color:var(--accent-2); outline:none; }
+  .row > label { display:inline-flex; align-items:center; }
+  .tip { position:fixed; z-index:9999; max-width:260px; padding:7px 9px;
+         background:#1e1e1e; color:var(--ink); border:1px solid var(--line-2);
+         border-radius:6px; font-size:11px; line-height:1.4; text-align:left;
+         box-shadow:0 4px 14px rgba(0,0,0,.5); pointer-events:none;
+         opacity:0; transition:opacity .12s; }
+  .tip.show { opacity:1; }
+
+  /* Reference diagrams (per-section schematics with dimension callouts) — same
+     system as the Preferences palette. Static/illustrative. */
+  .dg-wrap { width:100%; max-width:250px; margin:6px auto 4px; }
+  .dg-svg { width:100%; height:auto; display:block; }
+  .dg-svg .pnl  { fill:var(--bg-2); stroke:#8a8a8a; stroke-width:1.5; }
+  .dg-svg .pnl2 { fill:#3c4650; stroke:#6b7885; stroke-width:1.5; }
+  .dg-svg .open { fill:var(--bg); stroke:#8a8a8a; stroke-width:1.2; }
+  .dg-svg .tape { fill:var(--accent); }
+  .dg-svg .tape2{ fill:var(--accent-2); }
+  .dg-svg .floor{ stroke:#9aa7b2; stroke-width:2; stroke-dasharray:6 5; }
+  .dg-svg .dim  { stroke:var(--accent); stroke-width:1; fill:none; }
+  .dg-svg .ar   { fill:var(--accent); }
+  .dg-svg .lbl  { fill:var(--ink);  font-size:10px; text-anchor:middle;
+                  font-family:"Segoe UI",Roboto,Arial,sans-serif; }
+  .dg-svg .lbl-m{ fill:var(--muted); font-size:9px;  text-anchor:middle;
+                  font-family:"Segoe UI",Roboto,Arial,sans-serif; }
+  .dg-cap { max-width:250px; margin:0 auto 10px; color:var(--faint);
+            font-size:10.5px; line-height:1.4; text-align:center; }
 </style>
 </head>
 <body>
@@ -314,6 +349,9 @@
           <button class="tile" data-type="drawers" id="tileDrawers">
             <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="28" height="28" rx="2"/><path d="M6 16h28M6 25h28"/><path d="M17 11h6M17 20.5h6M17 29.5h6" stroke-width="2.4"/></svg>
             <span class="t">Gavetas</span></button>
+          <button class="tile" data-type="blind"   id="tileBlind">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="28" height="28" rx="2"/><path d="M9 31L31 9M15 33L33 15M9 25L25 9" stroke-width="1.4"/></svg>
+            <span class="t">Cego</span></button>
         </div>
 
         <!-- per-region options -->
@@ -370,17 +408,24 @@
       </button>
       <div class="sbody">
         <div class="subhead">Fundo (back panel)</div>
+        <div class="dg-anchor" data-diagram="back"></div>
         <div class="row"><label>Tem fundo</label>
           <span class="sw"><input type="checkbox" id="with_back"><span class="track"></span></span></div>
+        <div class="row"><label>Fixação do fundo</label>
+          <select id="back_mode" class="grow">
+            <option value="groove">Encaixado (ranhura)</option>
+            <option value="overlay">Sobreposto (atrás)</option>
+          </select></div>
         <div class="row"><label>Material do fundo</label><select id="back_material" class="grow"></select></div>
         <div class="row"><label>Espessura do fundo</label>
           <div class="field"><input type="number" id="back_t" step="1"><span class="unit">mm</span></div></div>
-        <div class="row"><label>Recuo do fundo</label>
+        <div class="row" id="rowBackSetback"><label>Recuo do fundo</label>
           <div class="field"><input type="number" id="back_setback" step="1"><span class="unit">mm</span></div></div>
-        <div class="row"><label>Profund. da ranhura</label>
+        <div class="row" id="rowDadoDepth"><label>Profund. da ranhura</label>
           <div class="field"><input type="number" id="dado_depth" step="1"><span class="unit">mm</span></div></div>
 
         <div class="subhead">Rodapé (toe kick)</div>
+        <div class="dg-anchor" data-diagram="kick"></div>
         <div class="row"><label>Tem rodapé</label>
           <span class="sw"><input type="checkbox" id="with_toe_kick"><span class="track"></span></span></div>
         <div class="row"><label>Material do rodapé</label><select id="toe_kick_material" class="grow"></select></div>
@@ -438,9 +483,71 @@
           </select></div>
         <div class="row"><label>Laterais até o piso (pés)</label>
           <span class="sw"><input type="checkbox" id="joinerySidesToFloor"><span class="track"></span></span></div>
-        <p class="hint" id="jnFloorHint">Ligado: as laterais descem até o chão (pés laterais) e o
-           rodapé fica recuado entre elas. Desligado: as laterais param na base e o rodapé é uma
-           caixa separada em toda a largura. (Requer rodapé.)</p>
+      </div>
+    </div>
+
+    <div class="section" id="secTamponamento">
+      <button class="shead" data-toggle="secTamponamento">
+        <span>Tamponamento (acabamento)</span><span class="tag">— painéis de acabamento</span>
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="sbody">
+        <p class="hint">Painéis de acabamento aplicados sobre as faces expostas (laterais e/ou
+           tampo). Cada face ligada acrescenta um painel <b>por fora</b> da estrutura, aumentando
+           as dimensões externas. As laterais vão do piso ao topo em toda a profundidade; o tampo
+           cobre toda a largura acabada. O interior não é afetado.</p>
+        <div class="row"><label>Lado esquerdo</label>
+          <span class="sw"><input type="checkbox" id="tampLeft"><span class="track"></span></span></div>
+        <div class="row"><label>Lado direito</label>
+          <span class="sw"><input type="checkbox" id="tampRight"><span class="track"></span></span></div>
+        <div class="row"><label>Superior</label>
+          <span class="sw"><input type="checkbox" id="tampTop"><span class="track"></span></span></div>
+        <div class="row"><label>Espessura</label>
+          <div class="field"><input type="number" id="tampThickness" step="1" min="0"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Avanço frontal</label>
+          <div class="field"><input type="number" id="tampFrontOverhang" step="1" min="0"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Material</label><select id="tampMaterial" class="grow"></select></div>
+      </div>
+    </div>
+
+    <!-- ARREMATE (ajuste até teto/parede) -->
+    <div class="section" id="secArremate">
+      <button class="shead" data-toggle="secArremate">
+        <span>Arremate (ajuste)</span><span class="tag">— até o teto / paredes</span>
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="sbody">
+        <p class="hint">Peças de <b>arremate</b> para o armário "alcançar" um teto ou paredes de
+           medida incerta: monte a carcaça um pouco menor e feche as folgas com peças frontais
+           cortadas com sobra e ajustadas no local. A <b>sanefa</b> superior sobe do topo até o
+           teto (dá aparência de altura total); as <b>réguas</b> laterais preenchem a folga até a
+           parede. Ficam <b>por fora</b> da carcaça (aumentam as dimensões externas); o interior
+           não é afetado.</p>
+        <div class="row"><label>Sanefa superior (até o teto)</label>
+          <span class="sw"><input type="checkbox" id="arrTop"><span class="track"></span></span></div>
+        <div class="row"><label>Medida da sanefa</label>
+          <select id="arrTopMode" class="grow">
+            <option value="gap">Informar folga</option>
+            <option value="ceiling">Informar altura do teto</option>
+          </select></div>
+        <div class="row" id="rowArrTopGap"><label>Folga até o teto</label>
+          <div class="field"><input type="number" id="arrTopGap" step="1" min="0"><span class="unit">mm</span></div></div>
+        <div class="row" id="rowArrCeiling"><label>Altura do teto (piso→teto)</label>
+          <div class="field"><input type="number" id="arrCeilingHeight" step="1" min="0"><span class="unit">mm</span></div></div>
+        <p class="hint" id="arrCeilingCalc" style="display:none"></p>
+        <div class="row"><label>Sanefa faceada com as frentes</label>
+          <span class="sw"><input type="checkbox" id="arrTopInline"><span class="track"></span></span></div>
+        <div class="row"><label>Sanefa em U (retornos laterais)</label>
+          <span class="sw"><input type="checkbox" id="arrTopUShape"><span class="track"></span></span></div>
+        <div class="row"><label>Régua esquerda (até a parede)</label>
+          <span class="sw"><input type="checkbox" id="arrLeft"><span class="track"></span></span></div>
+        <div class="row"><label>Régua direita (até a parede)</label>
+          <span class="sw"><input type="checkbox" id="arrRight"><span class="track"></span></span></div>
+        <div class="row"><label>Folga até a parede (cada lado)</label>
+          <div class="field"><input type="number" id="arrSideGap" step="1" min="0"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Espessura</label>
+          <div class="field"><input type="number" id="arrThickness" step="1" min="0"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Material</label><select id="arrMaterial" class="grow"></select></div>
       </div>
     </div>
 
@@ -452,6 +559,7 @@
       </button>
       <div class="sbody">
         <div class="subhead">Portas</div>
+        <div class="dg-anchor" data-diagram="doors"></div>
         <div class="row"><label>Material da porta</label><select id="door_material" class="grow"></select></div>
         <div class="row"><label>Espessura da porta</label>
           <div class="field"><input type="number" id="door_t" step="1"><span class="unit">mm</span></div></div>
@@ -461,6 +569,7 @@
           <span class="sw"><input type="checkbox" id="with_hinges"><span class="track"></span></span></div>
 
         <div class="subhead">Gavetas</div>
+        <div class="dg-anchor" data-diagram="drawers"></div>
         <div class="row"><label>Corrediça</label><select id="slide_key" class="grow"></select></div>
         <div class="row"><label>Material da caixa</label><select id="drawer_box_material" class="grow"></select></div>
         <div class="row"><label>Material da frente</label><select id="drawer_face_material" class="grow"></select></div>
@@ -483,6 +592,7 @@
         <p class="hint">A borda frontal do corpo (laterais/base/tampo/prateleiras/divisórias) e o
            topo da frente do rodapé recebem fita automaticamente; portas e frentes de gaveta
            levam fita nos quatro lados. Escolha a espessura por grupo (ou Nenhuma).</p>
+        <div class="dg-anchor" data-diagram="fita"></div>
         <div class="row"><label>Bordas do corpo</label>
           <select id="fita_carcass" class="grow">
             <option value="none">Nenhuma</option>
@@ -510,6 +620,7 @@
         <p class="hint">Valores finos de encaixe e furação. Os padrões seguem a prática de
            marcenaria; ajuste só se souber o que está fazendo.</p>
         <div class="subhead">Tolerâncias</div>
+        <div class="dg-anchor" data-diagram="tol"></div>
         <div class="row"><label>Folga fundo da ranhura</label>
           <div class="field"><input type="number" id="tol_dado_bottom_clearance" step="0.1"><span class="unit">mm</span></div></div>
         <div class="row"><label>Folga lateral da ranhura</label>
@@ -522,6 +633,7 @@
           <div class="field"><input type="number" id="tol_shelf_door_clearance" step="0.5"><span class="unit">mm</span></div></div>
 
         <div class="subhead">Dobradiça (furação de caneco)</div>
+        <div class="dg-anchor" data-diagram="hinge"></div>
         <div class="row"><label>Diâmetro do caneco</label>
           <div class="field"><input type="number" id="hinge_cup_diameter" step="0.5"><span class="unit">mm</span></div></div>
         <div class="row"><label>Profund. do caneco</label>
@@ -575,9 +687,9 @@
 
 /* Region type presentation. Colors reference the CSS custom-property palette so
    the canvas glyphs match the type tiles. */
-var TYPE_COLOR = { open:"#3f3f3f", shelves:"#2f5d78", doors:"#2f6b4a", drawers:"#8a5a24" };
-var TYPE_FILL  = { open:"#3a3a3a", shelves:"#26424f", doors:"#264d3a", drawers:"#5c421f" };
-var TYPE_LABEL = { open:"Vazio", shelves:"Prateleiras", doors:"Portas", drawers:"Gavetas" };
+var TYPE_COLOR = { open:"#3f3f3f", shelves:"#2f5d78", doors:"#2f6b4a", drawers:"#8a5a24", blind:"#8a7f73" };
+var TYPE_FILL  = { open:"#3a3a3a", shelves:"#26424f", doors:"#264d3a", drawers:"#5c421f", blind:"#4a453e" };
+var TYPE_LABEL = { open:"Vazio", shelves:"Prateleiras", doors:"Portas", drawers:"Gavetas", blind:"Cego" };
 
 var state = { cfg:null, cabinets:[], materials:[], slides:[], target:"new", sel:null, demo:false };
 
@@ -746,6 +858,15 @@ function leafGlyph(node, x, y, w, h, scale){
       s += '<rect x="'+ix+'" y="'+(dy+sw*2)+'" width="'+iw+'" height="'+(dh-sw*4)+'" fill="none" stroke="'+col+'" stroke-width="'+(sw*2)+'"/>';
       s += '<line x1="'+(x+w/2-iw*0.16)+'" y1="'+(dy+dh/2)+'" x2="'+(x+w/2+iw*0.16)+'" y2="'+(dy+dh/2)+'" stroke="'+col+'" stroke-width="'+(sw*3)+'"/>';
     }
+  } else if (node.type==="blind"){
+    // Solid panel blocking access: a filled front with diagonal hatching.
+    s += '<rect x="'+ix+'" y="'+iy+'" width="'+iw+'" height="'+ih+'" fill="'+col+'" fill-opacity="0.22" stroke="'+col+'" stroke-width="'+(sw*2)+'"/>';
+    var step = Math.max(iw,ih)/6;
+    for (var g = -ih; g < iw; g += step){
+      var ax = ix + Math.max(0, g),            ay = iy + Math.max(0, -g);
+      var bx = ix + Math.min(iw, g + ih),      by = iy + Math.min(ih, iw - g);
+      s += '<line x1="'+ax+'" y1="'+ay+'" x2="'+bx+'" y2="'+by+'" stroke="'+col+'" stroke-width="'+(sw*1.4)+'"/>';
+    }
   }
   return s;
 }
@@ -761,7 +882,7 @@ function renderInspector(){
                  : "grupo (dividido)");
 
   // type tiles
-  ["open","shelves","doors","drawers"].forEach(function(tp){
+  ["open","shelves","doors","drawers","blind"].forEach(function(tp){
     var el = document.getElementById("tile"+tp.charAt(0).toUpperCase()+tp.slice(1));
     el.disabled = !leaf;
     el.classList.toggle("on", leaf && node.type===tp);
@@ -770,10 +891,11 @@ function renderInspector(){
   var isDoors = leaf && node.type==="doors";
   var isDrawers = leaf && node.type==="drawers";
   var isShelves = leaf && node.type==="shelves";
-  var counted = leaf && node.type!=="open";
+  var isBlind = leaf && node.type==="blind";
+  var counted = leaf && node.type!=="open" && node.type!=="blind";
   show("rowCount", counted);
   show("rowShelvesBehind", isDoors);
-  show("rowInset", isDoors || isDrawers);
+  show("rowInset", isDoors || isDrawers || isBlind);
   show("rowAlign", isShelves);
 
   var wrap = has ? getWrapper(sel) : null;
@@ -894,7 +1016,55 @@ function syncFormFromCfg(){
   je=byId("joineryTopMode");        if(je) je.value = j.top_mode||"aligned";
   je=byId("joineryTopOverhang");    if(je) je.value = (j.top_overhang!=null?j.top_overhang:0);
   je=byId("joinerySidesToFloor");   if(je) je.checked = !!j.sides_to_floor;
+  // Tamponamento (acabamento): three face toggles + thickness + material. The
+  // material list gets a leading "inherit" option; blank cfg -> that option.
+  var tp = c.tamponamento||{}, te;
+  te=byId("tampLeft");      if(te) te.checked = !!tp.left;
+  te=byId("tampRight");     if(te) te.checked = !!tp.right;
+  te=byId("tampTop");       if(te) te.checked = !!tp.top;
+  te=byId("tampThickness"); if(te) te.value = (tp.t!=null?tp.t:18);
+  te=byId("tampFrontOverhang"); if(te) te.value = (tp.front_overhang!=null?tp.front_overhang:0);
+  fillSelect("tampMaterial", ["(mesmo do corpo)"].concat(state.materials),
+             tp.material||"(mesmo do corpo)");
+  // Arremate (ajuste): sanefa superior + réguas laterais (peças de folga até o
+  // teto/parede). Material list gets a leading "inherit" option; blank cfg -> it.
+  var ar = c.arremate||{}, ae;
+  ae=byId("arrTop");       if(ae) ae.checked = !!ar.top;
+  ae=byId("arrTopMode");   if(ae) ae.value = (ar.top_gap_mode==="ceiling"?"ceiling":"gap");
+  ae=byId("arrTopGap");    if(ae) ae.value = (ar.top_gap!=null?ar.top_gap:50);
+  ae=byId("arrCeilingHeight"); if(ae) ae.value = (ar.ceiling_height!=null?ar.ceiling_height:2400);
+  ae=byId("arrTopInline"); if(ae) ae.checked = !!ar.top_inline_fronts;
+  ae=byId("arrTopUShape"); if(ae) ae.checked = (ar.top_side_returns!=null?!!ar.top_side_returns:true);
+  ae=byId("arrLeft");      if(ae) ae.checked = !!ar.left;
+  ae=byId("arrRight");     if(ae) ae.checked = !!ar.right;
+  ae=byId("arrSideGap");   if(ae) ae.value = (ar.side_gap!=null?ar.side_gap:30);
+  ae=byId("arrThickness"); if(ae) ae.value = (ar.t!=null?ar.t:18);
+  fillSelect("arrMaterial", ["(mesmo do corpo)"].concat(state.materials),
+             ar.material||"(mesmo do corpo)");
+  // Fixação do fundo (back-panel mounting mode): groove vs overlay.
+  var bmEl=byId("back_mode"); if(bmEl) bmEl.value = c.back_mode||"groove";
   renderJoineryDiagram();
+  renderBackDiagram();
+  renderArremateMode();
+}
+// Sanefa measurement mode: show only the relevant input (measured gap vs total
+// ceiling height) and, in ceiling mode, a live readout of the derived gap
+// (ceiling_height - H).
+function renderArremateMode(){
+  var mEl=byId("arrTopMode"); if(!mEl) return;
+  var ceiling = (mEl.value==="ceiling");
+  var gapRow=byId("rowArrTopGap"), ceilRow=byId("rowArrCeiling"), calc=byId("arrCeilingCalc");
+  if(gapRow)  gapRow.style.display  = ceiling ? "none" : "";
+  if(ceilRow) ceilRow.style.display = ceiling ? "" : "none";
+  if(calc){
+    if(ceiling){
+      var H = parseFloat((byId("H")||{}).value)||0;
+      var ch = parseFloat((byId("arrCeilingHeight")||{}).value)||0;
+      var gap = Math.max(0, ch - H);
+      calc.textContent = "Folga calculada (altura do teto − altura do armário): " + gap + " mm";
+      calc.style.display = "";
+    } else { calc.style.display = "none"; }
+  }
 }
 function readCfgFromForm(){
   var c = state.cfg;
@@ -923,6 +1093,31 @@ function readCfgFromForm(){
   jr=byId("joineryTopMode");        if(jr) c.joinery.top_mode        = jr.value;
   jr=byId("joineryTopOverhang");    if(jr) c.joinery.top_overhang    = parseFloat(jr.value)||0;
   jr=byId("joinerySidesToFloor");   if(jr) c.joinery.sides_to_floor  = jr.checked;
+  // Tamponamento (acabamento). "(mesmo do corpo)" means inherit -> store "".
+  if(!c.tamponamento) c.tamponamento = {};
+  var tr;
+  tr=byId("tampLeft");      if(tr) c.tamponamento.left  = tr.checked;
+  tr=byId("tampRight");     if(tr) c.tamponamento.right = tr.checked;
+  tr=byId("tampTop");       if(tr) c.tamponamento.top   = tr.checked;
+  tr=byId("tampThickness"); if(tr) c.tamponamento.t     = parseFloat(tr.value)||0;
+  tr=byId("tampFrontOverhang"); if(tr) c.tamponamento.front_overhang = parseFloat(tr.value)||0;
+  tr=byId("tampMaterial");  if(tr) c.tamponamento.material = (tr.value==="(mesmo do corpo)"?"":tr.value);
+  // Arremate (ajuste). "(mesmo do corpo)" means inherit -> store "".
+  if(!c.arremate) c.arremate = {};
+  var ur;
+  ur=byId("arrTop");       if(ur) c.arremate.top      = ur.checked;
+  ur=byId("arrTopMode");   if(ur) c.arremate.top_gap_mode = (ur.value==="ceiling"?"ceiling":"gap");
+  ur=byId("arrTopGap");    if(ur) c.arremate.top_gap  = parseFloat(ur.value)||0;
+  ur=byId("arrCeilingHeight"); if(ur) c.arremate.ceiling_height = parseFloat(ur.value)||0;
+  ur=byId("arrTopInline"); if(ur) c.arremate.top_inline_fronts = ur.checked;
+  ur=byId("arrTopUShape"); if(ur) c.arremate.top_side_returns = ur.checked;
+  ur=byId("arrLeft");      if(ur) c.arremate.left     = ur.checked;
+  ur=byId("arrRight");     if(ur) c.arremate.right    = ur.checked;
+  ur=byId("arrSideGap");   if(ur) c.arremate.side_gap = parseFloat(ur.value)||0;
+  ur=byId("arrThickness"); if(ur) c.arremate.t        = parseFloat(ur.value)||0;
+  ur=byId("arrMaterial");  if(ur) c.arremate.material = (ur.value==="(mesmo do corpo)"?"":ur.value);
+  // Fixação do fundo (back-panel mounting mode).
+  var bmr=byId("back_mode"); if(bmr) c.back_mode = bmr.value;
 }
 
 /* Fixação lateral: redraw the schematic front elevation from the current modes
@@ -964,7 +1159,6 @@ function renderJoineryDiagram(){
   var tb=byId("jnTopOhBox"); if(tb) tb.classList.toggle("off", tMode!=="over");
   var bb=byId("jnBotOhBox"); if(bb) bb.classList.toggle("off", bMode!=="over");
   var s2fEl=byId("joinerySidesToFloor"); if(s2fEl) s2fEl.disabled = !hasKick;
-  var fh=byId("jnFloorHint"); if(fh) fh.style.opacity = hasKick ? "" : "0.5";
 }
 
 /* ---- small DOM helpers ------------------------------------------------------ */
@@ -1204,7 +1398,9 @@ function bindForm(){
   // dimensions + structure + fronts + advanced -> re-read & re-render
   var all = NUMS.concat(BOOLS, SELS, TEXTS, ["slide_key"], Object.keys(NESTED),
                         ["joineryBottomMode","joineryTopMode",
-                         "joineryBottomOverhang","joineryTopOverhang","joinerySidesToFloor"]);
+                         "joineryBottomOverhang","joineryTopOverhang","joinerySidesToFloor",
+                         "tampLeft","tampRight","tampTop","tampThickness","tampFrontOverhang","tampMaterial",
+                         "arrTop","arrTopMode","arrTopGap","arrCeilingHeight","arrTopInline","arrTopUShape","arrLeft","arrRight","arrSideGap","arrThickness","arrMaterial"]);
   all.forEach(function(k){
     var el=byId(k);
     if (el) el.addEventListener("change", function(){ readCfgFromForm(); render(); });
@@ -1212,6 +1408,13 @@ function bindForm(){
   // live diagram update while typing an overhang (the whole re-render happens on change)
   ["joineryBottomOverhang","joineryTopOverhang","joineryBottomMode","joineryTopMode"].forEach(function(k){
     var el=byId(k); if(el) el.addEventListener("input", function(){ readCfgFromForm(); renderJoineryDiagram(); });
+  });
+  // Fixação do fundo: swap the back schematic to match the selected mounting mode.
+  var bmEl=byId("back_mode");
+  if (bmEl) bmEl.addEventListener("change", function(){ readCfgFromForm(); renderBackDiagram(); render(); });
+  // Arremate: swap the gap vs ceiling-height field and keep the derived-gap readout live.
+  ["arrTopMode","arrCeilingHeight","H"].forEach(function(k){
+    var el=byId(k); if(el) el.addEventListener("input", renderArremateMode);
   });
   // live highlight of the diagram while editing a dimension
   ["W","H","D","t"].forEach(function(k){
@@ -1227,7 +1430,7 @@ function bindForm(){
       if (this.disabled || state.sel===null) return;
       var n=getNode(state.sel); if(isSplit(n)) return;
       n.type=this.getAttribute("data-type");
-      if (n.type!=="open" && !n.count) n.count=(n.type==="shelves"?3:2);
+      if (n.type!=="open" && n.type!=="blind" && !n.count) n.count=(n.type==="shelves"?3:2);
       render();
     });
   });
@@ -1264,7 +1467,7 @@ function bindForm(){
   // Hiding is cosmetic only — readCfgFromForm reads every field regardless.
   function applyAdvanced(){
     var on = byId("advancedMode").checked;
-    ["secStructure","secJoinery","secFronts","secFita","secAdvanced"].forEach(function(id){
+    ["secStructure","secJoinery","secTamponamento","secArremate","secFronts","secFita","secAdvanced"].forEach(function(id){
       var el = byId(id); if (el) el.style.display = on ? "" : "none";
     });
   }
@@ -1321,7 +1524,7 @@ function doApply(){
 function demoCfg(){
   return {
     W:800,H:2100,D:400,t:18, n_shelves:3, material:"MDF 18mm Branco", shelf_align_front:false,
-    with_back:true, back_material:"MDF 6mm Cru", back_t:6, dado_depth:8, back_setback:10,
+    with_back:true, back_mode:"groove", back_material:"MDF 6mm Cru", back_t:6, dado_depth:8, back_setback:10,
     with_toe_kick:true, toe_kick_material:"MDF 18mm Branco", toe_kick_t:18, toe_kick_height:100,
     toe_kick_setback:75, toe_kick_max_span:500,
     with_doors:false, door_material:"MDF 18mm Branco", door_t:18, n_doors:2, door_gap:3,
@@ -1337,6 +1540,8 @@ function demoCfg(){
     fita:{name_thin:"Fita PVC 0.4mm Branco",name_thick:"Fita PVC 1mm Branco",
           carcass:"thin",fronts:"thick"},
     joinery:{bottom_mode:"aligned",bottom_overhang:0,top_mode:"aligned",top_overhang:0,sides_to_floor:false},
+    tamponamento:{left:false,right:false,top:false,t:18,material:"",front_overhang:0},
+    arremate:{top:false,top_gap_mode:"gap",top_gap:50,ceiling_height:2400,top_inline_fronts:false,top_side_returns:true,left:false,right:false,side_gap:30,t:18,material:""},
     tol:{dado_bottom_clearance:0.5,dado_side_clearance:0.2,shelf_back_gap:1,
          shelf_front_setback:30,shelf_door_clearance:2},
     layout:{type:"shelves",count:3,inset:false,gap:null,shelf_align_front:null,
@@ -1374,7 +1579,318 @@ function init(tries){
   });
 }
 
-document.addEventListener("DOMContentLoaded", function(){ bindForm(); init(0); });
+/* ============================================================================
+   PER-SECTION REFERENCE DIAGRAMS — same schematics as the Preferences palette,
+   injected into the .dg-anchor placeholders inside the collapsible sections.
+   Static/illustrative (unlike the live dims + editable joinery drawings).
+============================================================================ */
+function _ah(x,y,d){
+  var s=5, w=2.6;
+  if (d==="l") return '<polygon class="ar" points="'+x+','+y+' '+(x+s)+','+(y-w)+' '+(x+s)+','+(y+w)+'"/>';
+  if (d==="r") return '<polygon class="ar" points="'+x+','+y+' '+(x-s)+','+(y-w)+' '+(x-s)+','+(y+w)+'"/>';
+  if (d==="u") return '<polygon class="ar" points="'+x+','+y+' '+(x-w)+','+(y+s)+' '+(x+w)+','+(y+s)+'"/>';
+  return         '<polygon class="ar" points="'+x+','+y+' '+(x-w)+','+(y-s)+' '+(x+w)+','+(y-s)+'"/>';
+}
+function _dimH(x0,x1,y,t){
+  return '<line class="dim" x1="'+x0+'" y1="'+y+'" x2="'+x1+'" y2="'+y+'"/>'
+       + _ah(x0,y,"l") + _ah(x1,y,"r")
+       + '<text class="lbl" x="'+((x0+x1)/2)+'" y="'+(y-4)+'">'+t+'</text>';
+}
+function _dimV(x,y0,y1,t){
+  var my=(y0+y1)/2;
+  return '<line class="dim" x1="'+x+'" y1="'+y0+'" x2="'+x+'" y2="'+y1+'"/>'
+       + _ah(x,y0,"u") + _ah(x,y1,"d")
+       + '<text class="lbl" x="'+x+'" y="'+my+'" transform="rotate(-90 '+x+' '+my+')">'+t+'</text>';
+}
+function _lead(x0,y0,x1,y1,t,tx,ty){
+  return '<line class="dim" x1="'+x0+'" y1="'+y0+'" x2="'+x1+'" y2="'+y1+'"/>'
+       + _ah(x1,y1,(Math.abs(x1-x0)>Math.abs(y1-y0))?(x1>x0?"r":"l"):(y1>y0?"d":"u"))
+       + '<text class="lbl" x="'+tx+'" y="'+ty+'">'+t+'</text>';
+}
+var DIAGRAMS = {
+  /* Rear-corner plan detail — GROOVE (encaixado): back seated in a dado. */
+  back:{ vb:"0 0 260 180", cap:
+    "Encaixado: o fundo assenta numa ranhura (dado) nas laterais/base/tampo. "
+    + "Espessura do fundo (back_t), profundidade da ranhura e recuo do fundo.",
+    svg:
+      '<rect class="pnl"  x="60"  y="28"  width="16"  height="122"/>'
+    + '<rect class="pnl2" x="68"  y="116" width="142" height="14"/>'
+    + '<rect class="pnl2" x="68"  y="116" width="8"   height="14"/>'
+    + '<text class="lbl-m" x="45" y="45" transform="rotate(-90 45 45)">lateral</text>'
+    + '<text class="lbl-m" x="150" y="112">fundo</text>'
+    + _dimV(228,116,150,"recuo")
+    + '<line class="dim" x1="210" y1="116" x2="228" y2="116"/>'
+    + '<line class="dim" x1="210" y1="150" x2="228" y2="150"/>'
+    + _lead(150,168,150,131,"esp. fundo",150,166)
+    + _lead(96,100,72,116,"ranhura",100,96)
+  },
+  /* Rear-corner plan detail — OVERLAY (sobreposto): back applied to the rear
+     face of the carcass, spanning the full width (no groove). */
+  back_overlay:{ vb:"0 0 260 180", cap:
+    "Sobreposto: o fundo é aplicado (aparafusado) na face traseira do corpo, em "
+    + "toda a largura, encostado nas bordas traseiras e sem ranhura. Só a espessura importa.",
+    svg:
+      '<rect class="pnl"  x="60"  y="30"  width="16"  height="104"/>'   // side, rear edge at y=134
+    + '<rect class="pnl2" x="60"  y="134" width="150" height="16"/>'    // back applied across the rear, extends behind
+    + '<text class="lbl-m" x="45" y="48" transform="rotate(-90 45 48)">lateral</text>'
+    + '<text class="lbl-m" x="150" y="146">fundo</text>'
+    + _lead(96,112,70,134,"aplicado atrás",100,108)
+    + _dimV(226,134,150,"esp.")
+    + '<line class="dim" x1="210" y1="134" x2="226" y2="134"/>'
+    + '<line class="dim" x1="210" y1="150" x2="226" y2="150"/>'
+  },
+  kick:{ vb:"0 0 260 200", cap:
+    "Altura e recuo (da frente do armário) do rodapé, e espessura da tábua frontal. "
+    + "Vão máx. sem reforço limita o comprimento antes de reforçar.",
+    svg:
+      '<rect class="pnl"  x="40" y="40"  width="180" height="70"/>'
+    + '<rect class="pnl2" x="184" y="110" width="10" height="60"/>'
+    + '<line class="floor" x1="26" y1="170" x2="234" y2="170"/>'
+    + '<text class="lbl-m" x="120" y="80">armário</text>'
+    + '<text class="lbl-m" x="55"  y="184">piso</text>'
+    + _dimV(240,110,170,"altura")
+    + _dimH(194,220,184,"recuo")
+    + _lead(189,124,189,112,"esp.",189,120)
+  },
+  doors:{ vb:"0 0 260 200", cap:
+    "N portas iguais · folga = reveal entre as portas e nas bordas · espessura (door_t). "
+    + "Sobreposta cobre a frente; embutida assenta no vão.",
+    svg:
+      '<rect class="pnl"  x="40" y="24" width="180" height="150"/>'
+    + '<rect class="pnl2" x="46" y="30" width="82"  height="138"/>'
+    + '<rect class="pnl2" x="132" y="30" width="82" height="138"/>'
+    + _lead(130,10,130,30,"folga",130,8)
+    + _lead(236,100,214,100,"folga",244,103)
+    + '<text class="lbl-m" x="87"  y="103">porta</text>'
+    + '<text class="lbl-m" x="173" y="103">porta</text>'
+  },
+  drawers:{ vb:"0 0 260 200", cap:
+    "N gavetas empilhadas · folga = reveal entre as frentes · frente (face_t), "
+    + "caixa (box_t) e fundo da gaveta (bottom_t). A corrediça define a dedução da caixa.",
+    svg:
+      '<rect class="pnl"  x="40" y="20" width="180" height="160"/>'
+    + '<rect class="pnl2" x="46" y="26" width="168" height="46"/>'
+    + '<rect class="pnl2" x="46" y="76" width="168" height="46"/>'
+    + '<rect class="pnl2" x="46" y="126" width="168" height="46"/>'
+    + '<rect x="70" y="82" width="120" height="34" fill="none" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 3"/>'
+    + '<text class="lbl-m" x="130" y="102">caixa</text>'
+    + _lead(232,97,214,97,"folga",240,100)
+  },
+  fita:{ vb:"0 0 260 172", cap:
+    "C1/C2 = bordas de comprimento (as maiores) · L1/L2 = bordas de largura (as menores). "
+    + "Fita fina = 0,4 mm · fita grossa = 1,0 mm.",
+    svg:
+      '<rect class="pnl" x="60" y="44" width="140" height="84"/>'
+    + '<rect class="tape"  x="60"  y="44"  width="140" height="5"/>'
+    + '<rect class="tape"  x="60"  y="123" width="140" height="5"/>'
+    + '<rect class="tape2" x="60"  y="44"  width="5"   height="84"/>'
+    + '<rect class="tape2" x="195" y="44"  width="5"   height="84"/>'
+    + '<text class="lbl" x="130" y="38">C1</text>'
+    + '<text class="lbl" x="130" y="146">C2</text>'
+    + '<text class="lbl" x="50"  y="86" transform="rotate(-90 50 86)">L1</text>'
+    + '<text class="lbl" x="210" y="86" transform="rotate(-90 210 86)">L2</text>'
+  },
+  hinge:{ vb:"0 0 260 200", cap:
+    "Caneco: diâmetro (Ø) e profundidade · distância borda→centro · recuo das pontas. "
+    + "O nº de dobradiças cresce com a altura da porta.",
+    svg:
+      '<rect class="pnl" x="70" y="20" width="120" height="160"/>'
+    + '<circle class="pnl2" cx="100" cy="60"  r="14"/>'
+    + '<circle class="pnl2" cx="100" cy="140" r="14"/>'
+    + _dimH(86,114,50,"Ø")
+    + _dimH(70,100,192,"borda→centro")
+    + _dimV(54,20,60,"recuo")
+    + '<rect class="pnl" x="212" y="44" width="20" height="90"/>'
+    + '<rect class="open" x="212" y="80" width="12" height="18"/>'
+    + _dimH(212,224,110,"prof.")
+    + '<text class="lbl-m" x="130" y="16">face interna da porta</text>'
+  },
+  tol:{ vb:"0 0 260 195", cap:
+    "Recuo da prateleira (frente), folga prat.–fundo (atrás) e folga prat.–porta. "
+    + "Folgas da ranhura (fundo/lateral) afinam o encaixe do fundo.",
+    svg:
+      '<rect class="pnl"  x="30"  y="24" width="200" height="150"/>'
+    + '<rect class="pnl2" x="38"  y="24" width="10"  height="150"/>'
+    + '<rect class="pnl2" x="212" y="30" width="10"  height="138"/>'
+    + '<rect class="open" x="64"  y="94" width="132" height="12"/>'
+    + '<text class="lbl-m" x="43"  y="120" transform="rotate(-90 43 120)">fundo</text>'
+    + '<text class="lbl-m" x="130" y="88">prateleira</text>'
+    + '<text class="lbl-m" x="217" y="120" transform="rotate(-90 217 120)">porta</text>'
+    + _dimH(48,64,130,"atrás")
+    + _dimH(196,212,130,"frente")
+  },
+};
+function buildDiagramHTML(name){
+  var d = DIAGRAMS[name]; if (!d) return "";
+  var s = '<div class="dg-wrap"><svg class="dg-svg" viewBox="'+d.vb+'" '
+        + 'xmlns="http://www.w3.org/2000/svg">'+d.svg+'</svg></div>';
+  if (d.cap) s += '<p class="dg-cap">'+d.cap+'</p>';
+  return s;
+}
+function injectSectionDiagrams(){
+  Array.prototype.forEach.call(document.querySelectorAll(".dg-anchor"), function(a){
+    var name = a.getAttribute("data-diagram");
+    if (name === "back") name = backDiagramName();   // pick groove/overlay variant
+    a.innerHTML = buildDiagramHTML(name);
+  });
+}
+/* Which back-panel schematic matches the current "Fixação do fundo" choice. */
+function backDiagramName(){
+  var e = byId("back_mode");
+  return (e && e.value === "overlay") ? "back_overlay" : "back";
+}
+/* Redraw just the back-panel anchor to match the selected mounting mode, and
+   hide the groove-only "Profund. da ranhura" field when the back is overlay. */
+function renderBackDiagram(){
+  var a = document.querySelector('.dg-anchor[data-diagram="back"]');
+  if (a) a.innerHTML = buildDiagramHTML(backDiagramName());
+  // The recuo + ranhura depth fields only apply to an encaixado (groove) back.
+  var overlay = (backDiagramName()==="back_overlay");
+  ["rowDadoDepth","rowBackSetback"].forEach(function(id){
+    var row = byId(id); if (row) row.style.display = overlay ? "none" : "";
+  });
+}
+
+/* ============================================================================
+   INLINE HELP  — an "i" badge next to each option, with a floating tooltip.
+   The tooltip element lives on <body> so overflow:hidden containers never clip
+   it; a single set of delegated listeners covers every [data-tip] element.
+============================================================================ */
+/* label help, keyed by the id of the control in the row */
+var HELP = {
+  // Medidas do armário
+  W:"Largura externa do armário (dimensão frontal, esquerda→direita), em mm.",
+  H:"Altura externa total, JÁ incluindo o rodapé, em mm.",
+  D:"Profundidade externa (da frente até o fundo), em mm.",
+  material:"Chapa usada no corpo (laterais/base/tampo). Vem da sua biblioteca de materiais.",
+  t:"Espessura da chapa da carcaça (ex.: 18 mm).",
+  // Interior (região selecionada)
+  leafCount:"Quantas prateleiras / portas / gavetas nesta região.",
+  leafShelvesBehind:"Prateleiras dentro da região de portas (atrás das portas).",
+  leafInset:"Ligado (embutida): frente assenta dentro do vão, faceada. Desligado (sobreposta): cobre a frente do corpo.",
+  leafAlign:"Ligado: prateleiras alinhadas com a frente do corpo. Desligado: recuadas.",
+  leafSize:"Tamanho da região dentro do pai. Como peso (fração do espaço livre) ou, ligando “fixo”, em mm exatos. O switch “fixo” alterna entre os dois.",
+  // Estrutura — fundo
+  with_back:"Adiciona um painel de fundo ao corpo do armário.",
+  back_mode:"Como o fundo é fixado. Encaixado: assenta numa ranhura (dado) nas laterais/base/tampo. "
+    + "Sobreposto: aplicado (aparafusado) na face traseira, em toda a largura, sem ranhura.",
+  back_material:"Chapa do painel de fundo (normalmente fina, ex.: 6 mm).",
+  back_t:"Grossura do painel de fundo, em mm.",
+  back_setback:"Distância da face traseira do corpo até o fundo, em mm.",
+  dado_depth:"Profundidade do rasgo (dado) onde o fundo encaixa, em mm.",
+  // Estrutura — rodapé
+  with_toe_kick:"Adiciona um rodapé (caixa) sob o armário. A altura total já inclui o rodapé.",
+  toe_kick_material:"Chapa usada nas peças do rodapé.",
+  toe_kick_height:"Altura do recuo do rodapé sob o corpo, em mm (padrão BR ~100 mm).",
+  toe_kick_t:"Grossura da chapa do rodapé, em mm.",
+  toe_kick_setback:"Quanto a tábua frontal do rodapé recua da frente do armário, em mm.",
+  toe_kick_max_span:"Comprimento máximo do rodapé antes de adicionar um reforço interno, em mm.",
+  // Fixação lateral
+  joineryTopMode:"Como o tampo encontra as laterais. Alinhada: tampo entre as laterais. Sobre base: tampo em toda a largura, lateral apoiada sob ele.",
+  joineryBottomMode:"Como a base encontra as laterais. Alinhada: base entre as laterais. Sobre base: base em toda a largura, lateral apoiada sobre ela.",
+  joinerySidesToFloor:"Ligado: as laterais descem até o chão (pés laterais) e o rodapé fica recuado entre elas. Desligado: as laterais param na base e o rodapé é uma caixa separada em toda a largura. Requer rodapé.",
+  // Tamponamento (acabamento)
+  tampLeft:"Painel de acabamento aplicado sobre a lateral esquerda (por fora da estrutura; aumenta a largura externa).",
+  tampRight:"Painel de acabamento aplicado sobre a lateral direita (por fora da estrutura; aumenta a largura externa).",
+  tampTop:"Painel de acabamento aplicado sobre o tampo (por fora da estrutura; aumenta a altura externa).",
+  tampThickness:"Grossura da chapa do tamponamento, em mm.",
+  tampFrontOverhang:"Quanto o tamponamento avança à frente da carcaça (0 = faceado). A traseira fica alinhada com o fundo, então o painel fica mais fundo que a carcaça.",
+  tampMaterial:"Chapa do tamponamento. Escolha “(mesmo do corpo)” para herdar o material da carcaça.",
+  // Frentes & ferragens
+  door_material:"Chapa usada nas portas.",
+  door_t:"Grossura da chapa da porta, em mm.",
+  door_gap:"Fresta (reveal) entre as portas e nas bordas, em mm.",
+  with_hinges:"Fura o caneco de 35 mm nas portas e os pilotos da placa nas laterais. Só geometria — não vai ao CorteCloud.",
+  slide_key:"Modelo de corrediça da biblioteca. Define a dedução da caixa e a profundidade mínima do armário.",
+  drawer_box_material:"Chapa das laterais/travessas da caixa da gaveta.",
+  drawer_face_material:"Chapa da frente da gaveta (fitada nos quatro lados).",
+  drawer_face_t:"Grossura da frente da gaveta, em mm (~18 mm).",
+  drawer_gap:"Fresta (reveal) entre as frentes das gavetas, em mm.",
+  insert_real_hardware:"Ligado: importa o CAD real da corrediça. Desligado: usa uma caixa proxy leve (melhor com muitas gavetas).",
+  // Fita de borda
+  fita_carcass:"Espessura da fita nas bordas visíveis do corpo (borda frontal de laterais/base/tampo/prateleiras). Nenhuma, 0,4mm ou 1mm.",
+  fita_fronts:"Espessura da fita nas frentes (portas, frentes de gaveta e topo do rodapé), fitadas nos quatro lados.",
+  fita_name_thin:"Nome da fita de 0,4 mm como deve aparecer no CorteCloud.",
+  fita_name_thick:"Nome da fita de 1 mm como deve aparecer no CorteCloud.",
+  // Arremate (ajuste)
+  arrTop:"Peça frontal (sanefa) sobre o tampo, do topo do armário até o teto. Fecha a folga vista de frente, dando aparência de altura total. Cortada com folga e ajustada no local.",
+  arrTopMode:"Como a altura da sanefa é informada. Informar folga: você digita a folga entre o topo do armário e o teto. Informar altura do teto: você digita a altura total do ambiente (piso→teto) e a folga é calculada (altura do teto − altura do armário).",
+  arrTopGap:"Altura da sanefa = folga entre o topo do armário e o teto, em mm. Aumenta a altura externa.",
+  arrCeilingHeight:"Altura total do ambiente do piso até o teto, em mm. A folga da sanefa é calculada como esta altura menos a altura (H) do armário.",
+  arrTopInline:"Com portas/gavetas sobrepostas, a sanefa acompanha o plano das frentes em vez de ficar recuada na frente da carcaça. Acrescenta uma segunda chapa à frente da sanefa para completar a profundidade até as frentes.",
+  arrTopUShape:"Fecha a sanefa em U: acrescenta um retorno de profundidade total sobre cada lateral, para as laterais expostas parecerem continuar até o teto. A tábua frontal passa a vão apenas entre os retornos. Ligado por padrão.",
+  arrLeft:"Régua frontal de arremate no lado esquerdo, para preencher a folga até a parede. Cortada com folga e escribada na parede.",
+  arrRight:"Régua frontal de arremate no lado direito, para preencher a folga até a parede.",
+  arrSideGap:"Largura de cada régua lateral = folga entre a lateral do armário e a parede, em mm. Aumenta a largura externa por lado ligado.",
+  arrThickness:"Grossura da chapa das peças de arremate, em mm.",
+  arrMaterial:"Chapa das peças de arremate. Escolha “(mesmo do corpo)” para herdar o material da carcaça.",
+  // Avançado — tolerâncias
+  tol_dado_bottom_clearance:"Folga extra no fundo do rasgo (dado) para o painel encaixar sem forçar, em mm.",
+  tol_dado_side_clearance:"Folga extra nas laterais do rasgo (largura da ranhura vs. espessura do painel), em mm.",
+  tol_shelf_back_gap:"Espaço entre a traseira da prateleira e o painel de fundo, em mm.",
+  tol_shelf_front_setback:"Recuo base da prateleira em relação à frente do corpo, em mm (quando não alinhada à frente).",
+  tol_shelf_door_clearance:"Folga entre a prateleira e uma porta fechada, para a porta não encostar, em mm.",
+  // Avançado — dobradiça
+  hinge_cup_diameter:"Diâmetro do furo do caneco na porta (padrão 35 mm).",
+  hinge_cup_depth:"Profundidade do furo cego do caneco, em mm.",
+  hinge_cup_edge:"Distância da borda da porta ao centro do caneco, em mm.",
+  hinge_end_inset:"Distância das pontas da porta à primeira/última dobradiça, em mm.",
+  hinge_shelf_clearance:"Distância mínima entre uma dobradiça e uma prateleira; conflitos são reposicionados automaticamente."
+};
+/* tips set directly on the element itself (tiles, buttons, overlay inputs) */
+var HELP_DIRECT = {
+  tileOpen:"Região vazia (nicho aberto), sem prateleiras/portas/gavetas.",
+  tileShelves:"Prateleiras horizontais distribuídas igualmente na região.",
+  tileDoors:"Portas de abrir cobrindo a região (furação de dobradiça opcional).",
+  tileDrawers:"Coluna de gavetas empilhadas com corrediça na região.",
+  tileBlind:"Painel cego fixo: bloqueia o acesso à região (ex.: canto morto de um armário em L). Sem abertura.",
+  splitV:"Divide a região em linhas (uma sobre a outra), com divisória horizontal entre elas.",
+  splitH:"Divide a região em colunas (lado a lado), com divisória vertical entre elas.",
+  del:"Remove a região e junta o espaço com a vizinha.",
+  joineryTopOverhang:"Avanço (mm): quanto a lateral avança sobre o tampo. 0 = apoia sob o painel; = espessura = faceada com a face externa. Só vale em “Sobre base”.",
+  joineryBottomOverhang:"Avanço (mm): quanto a lateral avança sobre a base. 0 = apoia sobre o painel; = espessura = faceada com a face externa. Só vale em “Sobre base”.",
+  advancedMode:"Mostra as seções de detalhe (estrutura, frentes, fita, avançado). Desligado, elas usam os padrões das Preferências."
+};
+function makeInfo(tip){
+  var s = document.createElement("span");
+  s.className = "info"; s.tabIndex = 0; s.setAttribute("role","note");
+  s.setAttribute("aria-label", tip); s.setAttribute("data-tip", tip);
+  s.textContent = "i"; return s;
+}
+function injectHelp(){
+  Object.keys(HELP).forEach(function(id){
+    var el = byId(id); if(!el) return;
+    var row = el.closest(".row"); if(!row) return;
+    var lab = row.querySelector("label"); if(!lab || lab.querySelector(".info")) return;
+    lab.appendChild(makeInfo(HELP[id]));
+  });
+  Object.keys(HELP_DIRECT).forEach(function(id){
+    var el = byId(id); if(el && !el.getAttribute("data-tip")) el.setAttribute("data-tip", HELP_DIRECT[id]);
+  });
+}
+(function(){                                        // floating-tooltip engine
+  var tip = document.createElement("div");
+  tip.className = "tip";
+  if (document.body) document.body.appendChild(tip);
+  else document.addEventListener("DOMContentLoaded", function(){ document.body.appendChild(tip); });
+  function place(el){
+    var txt = el.getAttribute("data-tip"); if(!txt) return;
+    tip.textContent = txt; tip.classList.add("show");
+    var r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+    var left = Math.max(6, Math.min(r.left + r.width/2 - tw/2, window.innerWidth - tw - 6));
+    var top = r.top - th - 8; if (top < 6) top = r.bottom + 8;
+    tip.style.left = left + "px"; tip.style.top = top + "px";
+  }
+  function hide(){ tip.classList.remove("show"); }
+  function tgt(e){ return e.target.closest ? e.target.closest("[data-tip]") : null; }
+  document.addEventListener("mouseover", function(e){ var el=tgt(e); if(el) place(el); });
+  document.addEventListener("mouseout",  function(e){ if(tgt(e)) hide(); });
+  document.addEventListener("focusin",   function(e){ var el=tgt(e); if(el) place(el); });
+  document.addEventListener("focusout",  hide);
+  document.addEventListener("scroll",     hide, true);
+})();
+
+document.addEventListener("DOMContentLoaded", function(){ injectSectionDiagrams(); bindForm(); injectHelp(); init(0); });
 </script>
 </body>
 </html>

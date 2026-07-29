@@ -25,7 +25,7 @@ import math
 
 # Add-in version (keep in sync with FusionMob.manifest). Bump the patch digit
 # (last number) on every modification — see CLAUDE.md "Versioning".
-__version__ = '1.7.1'
+__version__ = '1.16.3'
 
 app = None
 ui = None
@@ -258,6 +258,120 @@ JOINERY = {
 }
 
 
+# Tamponamento (acabamento): applied finishing panels over exposed carcass faces.
+# Each enabled face adds an applied panel OUTSIDE the structural face, so the
+# overall envelope grows by 't' per side / top panel. Sides run full height
+# (floor-to-top, covering the toe-kick recess) x full depth; the top caps the
+# full finished width (incl. side tamponamentos when present). The interior
+# datums never move -> region grid, back, shelves, doors, drawers and hinges are
+# all unaffected (modelled like the overlay back panel). Cut-list only, no
+# usinagem. v1 limitation: the panels extend past the nominal W x H envelope, but
+# the published fmob_* user parameters and multi-cabinet spacing still use the
+# nominal W x H x D (fine for a single exposed-end cabinet).
+TAMPONAMENTO = {
+    'left': False,          # apply over Lateral Esquerda
+    'right': False,         # apply over Lateral Direita
+    'top': False,           # apply over Tampo
+    't': 18.0,              # thickness (mm)
+    'material': '',         # '' -> inherit the carcass material
+    # How far the finish panels project FORWARD past the carcass front face (mm).
+    # 0 = flush with the front. The panels' rear edge always stays flush with the
+    # cabinet back (y = D), so a positive value makes them DEEPER than the carcass
+    # (depth = D + front_overhang) and they overhang the front. Applied uniformly
+    # to the side and top panels so the finished shell lines up at the front.
+    'front_overhang': 0.0,
+}
+
+
+# Arremate (ajuste): scribe / gap-filler pieces that let a cabinet "reach" an
+# uncertain ceiling and/or side walls. Standard BR practice: build the carcass a
+# little short, then close the gaps with front trim pieces that are cut oversized
+# and scribed / trimmed to fit on site. Two kinds, both modelled as thin FRONT
+# boards (thickness in Y, front face flush with the carcass front y=0), grain
+# locked and banded like a visible front:
+#   * TOP (sanefa frontal): a valance board spanning the carcass width, standing
+#     from the carcass top (Hc) up by 'top_gap' to meet the ceiling. Open behind
+#     -> it hides the gap as seen from the front, giving the "full height" look.
+#     'top_side_returns' (on by default) wraps it into a U with a full-depth return
+#     over each carcass side, so exposed ends look finished (the sides read as
+#     continuing to the ceiling); the front board then spans only between them.
+#   * SIDES (regua frontal): a front filler strip beside a carcass side, 'side_gap'
+#     wide (X), running the full finished height (floor to ceiling when a top
+#     sanefa is present, else floor to carcass top), scribed to the wall.
+# Like TAMPONAMENTO these sit OUTSIDE the carcass, so the envelope grows (up by
+# top_gap, out by side_gap per side) and the interior datums never move -> region
+# grid, back, shelves, doors, drawers and hinges are all unaffected. Cut-list
+# only (no usinagem); each piece carries an "ajustar no local" note so the shop
+# knows to cut it oversized and trim on install. v1: side and top gaps are closed
+# by independent pieces (sides run full height, the sanefa spans between them),
+# so the pieces never overlap; combining arremate with tamponamento on the SAME
+# side is out of scope (they would share volume).
+#
+# 'top_inline_fronts' faces the sanefa with the doors/drawers instead of leaving
+# it recessed at the carcass front. Overlay fronts project forward by their own
+# thickness (door front at y=-door_t, drawer face at y=-face_t), so a sanefa flush
+# at y=0 sits BEHIND the front plane. With this flag on, the structural sanefa
+# stays flush at the carcass front (screwed to the carcass) and a SECOND facing
+# sheet is added in front of it, its depth filling the gap so its visible face
+# lands exactly on the overlay front plane. The fill depth is derived from the
+# fronts (max overlay reach of enabled non-inset doors/drawers); with only inset
+# fronts (already at y=0) or no fronts the flag is a no-op.
+ARREMATE = {
+    'top': False,           # sanefa frontal to reach the ceiling
+    # How the sanefa height (carcass-top -> ceiling gap) is specified:
+    #   'gap'     -> use 'top_gap' directly (the measured gap).
+    #   'ceiling' -> derive the gap from the total floor->ceiling height
+    #                ('ceiling_height' - cabinet height H). Lets the user enter the
+    #                room's ceiling height and have the gap computed automatically.
+    # See resolve_arremate_top_gap (the single seam every consumer reads through).
+    'top_gap_mode': 'gap',
+    'top_gap': 50.0,        # gap carcass-top -> ceiling (mm) = sanefa height (mode 'gap')
+    'ceiling_height': 2400.0,  # total floor->ceiling height (mm), used in mode 'ceiling'
+    'top_inline_fronts': False,  # face the sanefa with the doors/drawers (adds a front sheet)
+    'top_side_returns': True,    # U-shape: wrap the sanefa with side returns (looks good on exposed ends)
+    'left': False,          # left regua frontal (gap to the left wall)
+    'right': False,         # right regua frontal (gap to the right wall)
+    'side_gap': 30.0,       # gap carcass-side -> wall (mm) = each strip width
+    't': 18.0,              # thickness of the filler pieces (mm)
+    'material': '',         # '' -> inherit the carcass material
+}
+
+
+# Top-sanefa gap input modes (Arremate). 'gap' = enter the measured carcass-top
+# -> ceiling gap directly; 'ceiling' = enter the total floor->ceiling height and
+# derive the gap (ceiling_height - H). See resolve_arremate_top_gap.
+ARREMATE_TOP_MODE_CHOICES = [('gap', 'Informar folga'),
+                             ('ceiling', 'Informar altura do teto')]
+
+
+def _arremate_top_mode_label(value):
+    for v, lbl in ARREMATE_TOP_MODE_CHOICES:
+        if v == value:
+            return lbl
+    return ARREMATE_TOP_MODE_CHOICES[0][1]
+
+
+def _arremate_top_mode_value(label):
+    for v, lbl in ARREMATE_TOP_MODE_CHOICES:
+        if lbl == label:
+            return v
+    return 'gap'
+
+
+def resolve_arremate_top_gap(cfg):
+    """Effective top-sanefa gap in mm (carcass-top -> ceiling).
+
+    In 'ceiling' mode the gap is derived from the total floor->ceiling height
+    minus the cabinet height H (never negative); otherwise the stored 'top_gap'
+    is used verbatim. Pure — no adsk dependency, unit-testable. This is the single
+    seam the builder and validation read the gap through, so the two can't drift.
+    """
+    arr = cfg.get('arremate') or ARREMATE
+    if arr.get('top_gap_mode') == 'ceiling':
+        return max(0.0, float(arr.get('ceiling_height', 0.0)) - float(cfg.get('H', 0.0)))
+    return float(arr.get('top_gap', 0.0))
+
+
 def fita_tape(fita_cfg, group):
     """Resolve a fita group ('carcass'/'fronts') to its tape name, or '' when the
     group is off ('none'). Pure — no adsk dependency, unit-testable."""
@@ -305,6 +419,27 @@ def _joinery_choice_value(label):
     return 'aligned'
 
 
+# Back-panel mounting modes (Fixacao do fundo). 'groove' = seated in dado grooves
+# cut into the sides/base/top (the classic encaixado fundo); 'overlay' = a
+# full-width panel simply applied/screwed to the rear of the carcass (sobreposto),
+# no grooves. See build_cabinet's back-panel block.
+BACK_MODE_CHOICES = [('groove', 'Encaixado (ranhura)'), ('overlay', 'Sobreposto (atras)')]
+
+
+def _back_mode_choice_label(value):
+    for v, lbl in BACK_MODE_CHOICES:
+        if v == value:
+            return lbl
+    return BACK_MODE_CHOICES[0][1]
+
+
+def _back_mode_choice_value(label):
+    for v, lbl in BACK_MODE_CHOICES:
+        if lbl == label:
+            return v
+    return 'groove'
+
+
 def _fita_value_for(name, thin_name, thick_name):
     """Classify a stored tape name into a choice ('none'/'thin'/'thick') given the
     two configured tape names. An unknown non-empty tape counts as present, so it
@@ -335,7 +470,10 @@ DEFAULT_CFG = {
     # 'shelf_front_setback' (30mm); True = shelves flush with the carcass front.
     # Either way an inset door still forces the shelves behind the door body.
     'shelf_align_front': False,
-    'with_back': True, 'back_material': 'MDF 6mm Cru',
+    # Back panel: 'back_mode' picks how it is mounted -- 'groove' (default) seats
+    # it in dado grooves cut into the sides/base/top; 'overlay' applies a
+    # full-width panel to the rear of the carcass (sobreposto), with no grooves.
+    'with_back': True, 'back_mode': 'groove', 'back_material': 'MDF 6mm Cru',
     'back_t': 6.0, 'dado_depth': 8.0, 'back_setback': 10.0,
     'with_toe_kick': True, 'toe_kick_material': MATERIALS[0][0],
     'toe_kick_t': 18.0, 'toe_kick_height': 100.0, 'toe_kick_setback': 75.0,
@@ -373,6 +511,13 @@ DEFAULT_CFG = {
     # Side<->base/top joinery (Fixacao Lateral). Both 'aligned' = today's
     # geometry (base/top between full-height sides). See JOINERY / build_cabinet.
     'joinery': dict(JOINERY),
+    # Tamponamento (acabamento): applied finish panels over exposed faces (left /
+    # right side + top). Adds to the envelope; interior unaffected. See TAMPONAMENTO.
+    'tamponamento': dict(TAMPONAMENTO),
+    # Arremate (ajuste): scribe / gap-filler pieces to reach an uncertain ceiling
+    # (top sanefa) and/or side walls (front reguas). Adds to the envelope; interior
+    # unaffected. See ARREMATE.
+    'arremate': dict(ARREMATE),
     # Interior LAYOUT. None is a sentinel meaning "derive a single-region layout
     # from the flat fields above" (see normalize_cfg / _synthesize_layout_from_flat)
     # so old stored cabinets and the classic New/Edit dialog keep working. The
@@ -995,17 +1140,18 @@ def _find_vertical_edge(body, x_c, y_c, tol=1e-3):
 def _set_door_swing_limits(joint, hinge_side):
     """Limit the swing to a ~110° range on the OUTWARD side so the pivot reads
     like a real hinge and can only open the correct way. The rest state stays at
-    0 (closed). Both doors' hinge edges run +Z, so a positive rotation swings
-    them the same rotational sense: that opens a right-hinged door outward but a
-    left-hinged one inward. Restricting the left door to the negative range
-    (-110..0) makes it open outward instead. Optional; never fatal."""
+    0 (closed). With the door as the joint's moving member (occurrenceOne) and
+    both hinge edges running +Z, a positive rotation swings both doors the same
+    rotational sense: that opens a LEFT-hinged door outward but a right-hinged
+    one inward. Restricting the right door to the negative range (-110..0) makes
+    it open outward instead. Optional; never fatal."""
     try:
         limits = joint.jointMotion.rotationLimits
         swing = math.radians(110.0)
         if hinge_side == 'left':
-            lo, hi = -swing, 0.0
-        else:
             lo, hi = 0.0, swing
+        else:
+            lo, hi = -swing, 0.0
         limits.isMinimumValueEnabled = True
         limits.minimumValue = lo
         limits.isMaximumValueEnabled = True
@@ -1021,8 +1167,10 @@ def attach_door_pivots(cabinet_comp, anchor_occ, door_occs):
     vertically at the door's interior-facing back face (y = hinge_y_c, which is 0
     for overlay doors and +thickness for inset ones), at x = hinge_x_c (cm) in the
     door body's coordinates; hinge_side ('left'/'right') sets which way it opens.
-    Best-effort — a door that can't be jointed is left positioned but free.
-    Returns how many pivots were created."""
+    The door is passed as the joint's occurrenceOne (the moving member) and the
+    grounded carcass as occurrenceTwo (the fixed base), so opening swings the
+    door and not the carcass. Best-effort — a door that can't be jointed is left
+    positioned but free. Returns how many pivots were created."""
     made = 0
     try:
         as_built = cabinet_comp.asBuiltJoints
@@ -1037,7 +1185,12 @@ def attach_door_pivots(cabinet_comp, anchor_occ, door_occs):
             edge_proxy = edge.createForAssemblyContext(occ)
             geo = adsk.fusion.JointGeometry.createByCurve(
                 edge_proxy, adsk.fusion.JointKeyPointTypes.MiddleKeyPoint)
-            ji = as_built.createInput(anchor_occ, occ, geo)
+            # Order matters: the joint value is occurrenceOne RELATIVE TO
+            # occurrenceTwo, so occurrenceOne is the member that moves and
+            # occurrenceTwo is the fixed base. The DOOR must be occurrenceOne
+            # and the (grounded) carcass occurrenceTwo — otherwise opening the
+            # door rotates the whole carcass instead of the door.
+            ji = as_built.createInput(occ, anchor_occ, geo)
             ji.setAsRevoluteJointMotion(
                 adsk.fusion.JointDirections.CustomJointDirection, edge_proxy)
             joint = as_built.add(ji)
@@ -1241,8 +1394,10 @@ def attach_drawer_slides(cabinet_comp, anchor_occ, drawer_units):
     {'occ', 'edge_x_c', 'edge_z_c', 'travel_c'}; the joint axis is a Y-running edge
     of the drawer's own box-side body (at edge_x_c/edge_z_c). As-built joints need
     real geometry for non-rigid motion (None only works for rigid joints), which is
-    why we locate that edge. Best-effort — a drawer that can't be jointed is left
-    positioned but free. Returns how many slides were created."""
+    why we locate that edge. The drawer is the joint's occurrenceOne (the moving
+    member) and the grounded carcass occurrenceTwo (the fixed base), so pulling
+    slides the drawer and not the carcass. Best-effort — a drawer that can't be
+    jointed is left positioned but free. Returns how many slides were created."""
     made = 0
     try:
         as_built = cabinet_comp.asBuiltJoints
@@ -1260,7 +1415,10 @@ def attach_drawer_slides(cabinet_comp, anchor_occ, drawer_units):
                 continue
             geo = adsk.fusion.JointGeometry.createByCurve(
                 edge, adsk.fusion.JointKeyPointTypes.MiddleKeyPoint)
-            ji = as_built.createInput(anchor_occ, occ, geo)
+            # occurrenceOne is the mover (value = occurrenceOne relative to
+            # occurrenceTwo); the DRAWER must be occurrenceOne and the grounded
+            # carcass occurrenceTwo, or pulling the drawer slides the carcass.
+            ji = as_built.createInput(occ, anchor_occ, geo)
             ji.setAsSliderJointMotion(
                 adsk.fusion.JointDirections.CustomJointDirection, edge)
             joint = as_built.add(ji)
@@ -1677,6 +1835,39 @@ def build_drawers(band, node, ctx, prefix):
                                    'edge_z_c': bz0, 'travel_c': box_depth_c * 0.9})
 
 
+def build_blind(band, node, ctx, prefix):
+    """A fixed 'blind' panel covering the region front — a solid piece of material
+    that simply blocks access to the region (e.g. the dead corner of an L-shaped
+    run). Laid out like a single overlay/inset front, but FIXED: it joins the rigid
+    carcass (no hinge, no joint) and is grain-locked + edge-banded like any visible
+    front. Overlay (default) applies it to the carcass front; inset seats it flush
+    in the clear opening."""
+    gap = ctx.door_gap if node.get('gap') is None else node['gap']
+    gap_c = gap / 10.0
+    inset = node.get('inset', False)
+    pt = ctx.door_t
+    pt_c = pt / 10.0
+    if inset:
+        span0_c = band.x0
+        region_w_mm = (band.x1 - band.x0) * 10.0
+        z0 = band.z0 + gap_c
+        region_h_mm = (band.z1 - band.z0) * 10.0
+        y0_c = 0.0
+    else:
+        span0_c = band.x0 - band.ext_l
+        region_w_mm = ((band.x1 + band.ext_r) - (band.x0 - band.ext_l)) * 10.0
+        z0 = (band.z0 - band.ext_b) + gap_c
+        region_h_mm = ((band.z1 + band.ext_t) - (band.z0 - band.ext_b)) * 10.0
+        y0_c = -pt_c
+    w_mm = region_w_mm - 2 * gap
+    h_mm = region_h_mm - 2 * gap
+    ctx.blind_i += 1
+    name = _pname(ctx, prefix, 'Cego', ctx.blind_i, single_ok=ctx.single_leaf)
+    data = make_panel_data('Cego', name, h_mm, w_mm, ctx.door_material,
+                           girar='Nao', band=ctx.fita_front)
+    ctx.add_panel(name, (span0_c + gap_c, y0_c, z0, w_mm / 10.0, pt_c, h_mm / 10.0), data)
+
+
 def build_region_leaf(band, node, ctx, prefix):
     typ = node.get('type', 'open')
     if typ == 'shelves':
@@ -1685,6 +1876,8 @@ def build_region_leaf(band, node, ctx, prefix):
         build_doors(band, node, ctx, prefix)
     elif typ == 'drawers':
         build_drawers(band, node, ctx, prefix)
+    elif typ == 'blind':
+        build_blind(band, node, ctx, prefix)
     # 'open' -> nothing
 
 
@@ -1851,6 +2044,8 @@ def build_cabinet(design, cfg, translation=None):
     n_shelves, material = cfg['n_shelves'], cfg['material']
     shelf_align_front = cfg.get('shelf_align_front', False)
     with_back, back_material = cfg['with_back'], cfg['back_material']
+    back_mode = cfg.get('back_mode', 'groove')
+    back_overlay = with_back and back_mode == 'overlay'
     back_t, dado_depth, back_setback = cfg['back_t'], cfg['dado_depth'], cfg['back_setback']
     with_toe_kick = cfg['with_toe_kick']
     toe_kick_material, toe_kick_t = cfg['toe_kick_material'], cfg['toe_kick_t']
@@ -1864,6 +2059,12 @@ def build_cabinet(design, cfg, translation=None):
     hinge = cfg.get('hinge', HINGE)
     tol = cfg['tol']
     joinery = cfg.get('joinery', JOINERY)
+    # Tamponamento (acabamento) applied finish panels; material '' inherits carcass.
+    tamp = cfg.get('tamponamento', TAMPONAMENTO)
+    tamp_material = tamp.get('material') or material
+    # Arremate (ajuste) scribe / gap-filler pieces; material '' inherits carcass.
+    arremate = cfg.get('arremate', ARREMATE)
+    arremate_material = arremate.get('material') or material
     # Edge banding tapes for this build (see FITA / fita_tape). '' when a group
     # is off. 'carcass' bands the front edge of sides/base/top/shelves/dividers;
     # 'fronts' bands doors/faces (all four) and the toe-kick front board.
@@ -2002,11 +2203,12 @@ def build_cabinet(design, cfg, translation=None):
         carcass_occs.append(occ)
         return occ
 
-    # Precompute the dado grooves (cm) when there's a back panel. Each groove is
-    # cut the full 'dd' deep and 'back_t + 2*sc' wide so the back seats with
-    # bottom + side clearance and never fills the whole slot.
+    # Precompute the dado grooves (cm) when there's a GROOVE-mounted back panel.
+    # Each groove is cut the full 'dd' deep and 'back_t + 2*sc' wide so the back
+    # seats with bottom + side clearance and never fills the whole slot. An
+    # overlay (sobreposto) back is applied to the rear face instead -- no grooves.
     left_g = right_g = base_g = top_g = None
-    if with_back:
+    if with_back and not back_overlay:
         dd = dado_depth                          # groove depth into each panel (mm)
         sc = tol['dado_side_clearance']          # play on the back's faces in the groove
         by0 = D - back_setback - back_t          # back front face (mm from front)
@@ -2019,8 +2221,11 @@ def build_cabinet(design, cfg, translation=None):
         top_g = [(tc, gy0_c, z_off + Hbox_c - tc, Wc - 2 * tc, gw_c, ddc)]
 
     # Where the back panel's front face sits (mm from the front). Shelves, drawer
-    # boxes and interior dividers all stop at (or just short of) this plane.
-    back_front_y = (D - back_setback - back_t) if with_back else D
+    # boxes and interior dividers all stop at (or just short of) this plane. A
+    # GROOVE back recesses the interior by (setback + thickness); an OVERLAY back
+    # is applied flush to the rear edges (y = D) and extends behind, so the
+    # interior runs the full depth (like having no back).
+    back_front_y = (D - back_setback - back_t) if (with_back and not back_overlay) else D
 
     # Base and top: captured between the sides ('aligned') or running the full
     # width ('over'); see the joinery block above. Thickness runs along Z; their
@@ -2037,8 +2242,20 @@ def build_cabinet(design, cfg, translation=None):
               make_panel_data('Tampo', top_note, top_dim_a, D, material,
                               bands={'a': (fita_carcass, '')}), top_grooves or None)
 
-    # Back panel: reaches 'engage' (= dd - bottom clearance) into all four grooves.
-    if with_back:
+    # Back panel. GROOVE mode: reaches 'engage' (= dd - bottom clearance) into all
+    # four grooves, sized inner_w/(Hbox-2t) plus that engagement. OVERLAY mode:
+    # a full-width x full-carcass-height board applied (screwed) to the rear face
+    # of the carcass -- its front face flush with the sides/base/top rear edges
+    # (y = D) and extending back_t behind, so it never shares volume with the
+    # carcass (no grooves, no interference) and the interior runs full depth.
+    if with_back and back_overlay:
+        back_w = W
+        back_h = Hbox
+        add_panel('Fundo',
+                  (0.0, Dc, z_off,
+                   back_w / 10.0, back_t / 10.0, back_h / 10.0),
+                  make_panel_data('Fundo', 'Fundo', back_w, back_h, back_material))
+    elif with_back:
         engage = dd - tol['dado_bottom_clearance']
         engc = engage / 10.0
         by0_c = (D - back_setback - back_t) / 10.0
@@ -2144,7 +2361,7 @@ def build_cabinet(design, cfg, translation=None):
     ctx.door_occs = []
     ctx.drawer_bundles = []
     ctx.hole_map = {}
-    ctx.door_i = ctx.drawer_i = ctx.shelf_i = 0
+    ctx.door_i = ctx.drawer_i = ctx.shelf_i = ctx.blind_i = 0
     layout = cfg['layout']
     ctx.single_leaf = not is_split(layout)
 
@@ -2180,6 +2397,137 @@ def build_cabinet(design, cfg, translation=None):
               make_panel_data('Lateral', 'Lateral Direita', side_len_mm, D, material,
                               bands={'a': (fita_carcass, '')}),
               right_g, ctx.hole_map.get('R'))
+
+    # Tamponamento (applied finish panels over exposed faces). Each sits OUTSIDE
+    # the structural face, so it extends past the nominal W x H envelope. Sides
+    # run the full height (0..Hc, incl. the toe-kick recess); the top caps the
+    # full finished width (covering the side tamponamentos when present). Depth:
+    # the rear edge stays flush with the cabinet back (y = Dc) and the panels can
+    # project FORWARD past the carcass front by 'front_overhang' (y0 = -proj_c),
+    # so their depth = D + front_overhang. The interior is untouched (like the
+    # overlay back panel). Front edge banded with the fronts tape, grain locked
+    # (Girar=Nao) as a visible finish. These join the carcass rigid group / cut
+    # list via add_panel like any other panel.
+    Hc = z_off + Hbox_c   # carcass top face (== H/10)
+    tt_c = tamp['t'] / 10.0
+    tamp_proj_c = float(tamp.get('front_overhang', 0.0)) / 10.0
+    tamp_y0 = -tamp_proj_c                 # front edge (projects forward when > 0)
+    tamp_dy = Dc + tamp_proj_c             # full depth incl. the forward projection
+    tamp_depth_mm = D + float(tamp.get('front_overhang', 0.0))   # cut-list depth
+    if tamp.get('left'):
+        add_panel('Tamponamento Esquerdo', (-tt_c, tamp_y0, 0.0, tt_c, tamp_dy, Hc),
+                  make_panel_data('Tamponamento', 'Tamponamento Esquerdo', H, tamp_depth_mm,
+                                  tamp_material, girar='Nao',
+                                  bands={'a': (fita_front, '')}))
+    if tamp.get('right'):
+        add_panel('Tamponamento Direito', (Wc, tamp_y0, 0.0, tt_c, tamp_dy, Hc),
+                  make_panel_data('Tamponamento', 'Tamponamento Direito', H, tamp_depth_mm,
+                                  tamp_material, girar='Nao',
+                                  bands={'a': (fita_front, '')}))
+    if tamp.get('top'):
+        top_x0 = -tt_c if tamp.get('left') else 0.0
+        top_w_c = Wc + (tt_c if tamp.get('left') else 0.0) + (tt_c if tamp.get('right') else 0.0)
+        add_panel('Tamponamento Superior', (top_x0, tamp_y0, Hc, top_w_c, tamp_dy, tt_c),
+                  make_panel_data('Tamponamento', 'Tamponamento Superior', top_w_c * 10.0,
+                                  tamp_depth_mm, tamp_material, girar='Nao',
+                                  bands={'a': (fita_front, '')}))
+
+    # Arremate (ajuste): scribe / gap-filler FRONT pieces. Thin boards (thickness
+    # in Y = arr_t_c), front face flush with the carcass front (y in [0, arr_t_c]),
+    # sitting OUTSIDE the box so the interior is untouched (like the overlay back /
+    # tamponamento). Grain locked (Girar=Nao), banded with the fronts tape, and
+    # each carries an "ajustar no local" note -> cut oversized and trimmed on site.
+    #   * Side reguas run the full finished height (floor -> ceiling when a top
+    #     sanefa is present, else floor -> carcass top) and stand beside the box.
+    #   * The top sanefa spans only the carcass width (x in [0, Wc]) between the
+    #     reguas, so the pieces never overlap. Envelope grows up by top_gap and out
+    #     by side_gap per enabled side.
+    arr_t_c = float(arremate.get('t', 18.0)) / 10.0
+    arr_top = bool(arremate.get('top'))
+    # Effective gap: entered directly ('gap' mode) or derived from the room's total
+    # ceiling height ('ceiling' mode = ceiling_height - H). Single source of truth.
+    arr_top_gap_mm = resolve_arremate_top_gap(cfg)
+    arr_top_gap_c = arr_top_gap_mm / 10.0
+    arr_side_gap_c = float(arremate.get('side_gap', 0.0)) / 10.0
+    arr_y0, arr_dy = 0.0, arr_t_c            # front face flush at y = 0
+    # Full finished height: reach the ceiling when a top sanefa closes that gap.
+    arr_side_h_c = Hc + (arr_top_gap_c if arr_top else 0.0)
+    arr_side_h_mm = arr_side_h_c * 10.0
+    if arremate.get('left'):
+        add_panel('Arremate Esquerdo',
+                  (-arr_side_gap_c, arr_y0, 0.0, arr_side_gap_c, arr_dy, arr_side_h_c),
+                  make_panel_data('Arremate', 'Arremate Esquerdo (ajustar no local)',
+                                  arr_side_h_mm, arremate['side_gap'], arremate_material,
+                                  girar='Nao', bands={'a': (fita_front, '')}))
+    if arremate.get('right'):
+        add_panel('Arremate Direito',
+                  (Wc, arr_y0, 0.0, arr_side_gap_c, arr_dy, arr_side_h_c),
+                  make_panel_data('Arremate', 'Arremate Direito (ajustar no local)',
+                                  arr_side_h_mm, arremate['side_gap'], arremate_material,
+                                  girar='Nao', bands={'a': (fita_front, '')}))
+    if arr_top:
+        # Sanefa faceada com as frentes ('top_inline_fronts'): overlay fronts project
+        # forward by their thickness (door front at y=-door_t, drawer face at
+        # y=-face_t), leaving a flush sanefa recessed. When on, the whole sanefa
+        # assembly is pushed forward so its visible face lands on the overlay front
+        # plane (y = -front_reach); the structural board stays flush at y=0 and a
+        # facing sheet fills the gap in front of it. Derived from the enabled
+        # non-inset fronts; 0 (no-op) when there are none.
+        front_reach_mm = 0.0
+        if arremate.get('top_inline_fronts'):
+            if with_doors and not door_inset:
+                front_reach_mm = max(front_reach_mm, float(door_t))
+            if cfg.get('with_drawers') and not cfg.get('drawer_inset'):
+                front_reach_mm = max(front_reach_mm, float(cfg['drawer']['face_t']))
+        fr_c = front_reach_mm / 10.0
+        front_y0 = -fr_c                         # front face of the sanefa assembly
+        # Sanefa em U ('top_side_returns', on by default): two side returns cap the
+        # exposed ends so the valance looks finished from the laterals. Each return
+        # is a full-depth board sitting directly above its carcass side (x in
+        # [0,t] / [Wc-t,Wc]), running front-to-back from the sanefa front face to the
+        # cabinet back (y in [front_y0, Dc]) at the gap height, i.e. the side visually
+        # continues up to the ceiling. To avoid sharing volume with the returns, the
+        # front board then spans only BETWEEN them (x in [t, Wc-t]); without the U it
+        # spans the full carcass width. No overlap: front and returns butt at x=t /
+        # x=Wc-t. The returns' visible (forward) edge is the top_gap-length edge -> 'b'.
+        arr_us = bool(arremate.get('top_side_returns', True))
+        front_x0 = arr_t_c if arr_us else 0.0
+        front_x1 = (Wc - arr_t_c) if arr_us else Wc
+        front_w_c = front_x1 - front_x0
+        front_w_mm = front_w_c * 10.0
+        # (1) structural front board, flush at the carcass front (y in [0, arr_t_c]).
+        # Guarded for a degenerate cabinet narrower than the two returns (Wc <= 2t),
+        # where the front board would vanish and the returns fill the whole width.
+        if front_w_c > 0:
+            add_panel('Arremate Superior',
+                      (front_x0, 0.0, Hc, front_w_c, arr_t_c, arr_top_gap_c),
+                      make_panel_data('Arremate', 'Arremate Superior (ajustar no local)',
+                                      front_w_mm, arr_top_gap_mm, arremate_material,
+                                      girar='Nao', bands={'a': (fita_front, '')}))
+            # (2) facing sheet in front of it, filling the depth to the overlay front plane.
+            if fr_c > 0:
+                add_panel('Arremate Superior Frente',
+                          (front_x0, front_y0, Hc, front_w_c, fr_c, arr_top_gap_c),
+                          make_panel_data('Arremate',
+                                          'Arremate Superior Frente (faceado, ajustar no local)',
+                                          front_w_mm, arr_top_gap_mm, arremate_material,
+                                          girar='Nao', bands={'a': (fita_front, '')}))
+        # (3) side returns (U-shape) — full depth from the front face to the back.
+        if arr_us:
+            ret_dy = Dc - front_y0               # front_y0 <= 0 -> Dc + fr_c
+            ret_depth_mm = ret_dy * 10.0
+            add_panel('Arremate Superior Retorno Esquerdo',
+                      (0.0, front_y0, Hc, arr_t_c, ret_dy, arr_top_gap_c),
+                      make_panel_data('Arremate',
+                                      'Arremate Superior Retorno Esquerdo (ajustar no local)',
+                                      ret_depth_mm, arr_top_gap_mm, arremate_material,
+                                      girar='Nao', bands={'b': (fita_front, '')}))
+            add_panel('Arremate Superior Retorno Direito',
+                      (Wc - arr_t_c, front_y0, Hc, arr_t_c, ret_dy, arr_top_gap_c),
+                      make_panel_data('Arremate',
+                                      'Arremate Superior Retorno Direito (ajustar no local)',
+                                      ret_depth_mm, arr_top_gap_mm, arremate_material,
+                                      girar='Nao', bands={'b': (fita_front, '')}))
 
     door_occs = ctx.door_occs
     drawer_bundles = ctx.drawer_bundles
@@ -2257,7 +2605,7 @@ _edit_cabinets = []
 # place columns left-to-right (vertical dividers). Child sizes are absolute mm
 # (fixed=True) or flex weights (fixed=False) that share the leftover space.
 # -----------------------------------------------------------------------------
-LEAF_TYPES = ('open', 'shelves', 'doors', 'drawers')
+LEAF_TYPES = ('open', 'shelves', 'doors', 'drawers', 'blind')
 
 
 def is_split(node):
@@ -2333,7 +2681,7 @@ def _normalize_layout_node(node):
 def normalize_cfg(cfg):
     """Fill any missing keys from the defaults (robust to older stored configs)."""
     out = dict(DEFAULT_CFG)
-    out.update({k: cfg[k] for k in cfg if k not in ('tol', 'hinge', 'drawer', 'fita', 'joinery', 'layout')})
+    out.update({k: cfg[k] for k in cfg if k not in ('tol', 'hinge', 'drawer', 'fita', 'joinery', 'tamponamento', 'arremate', 'layout')})
     tol = dict(DEFAULT_TOL)
     if isinstance(cfg.get('tol'), dict):
         tol.update(cfg['tol'])
@@ -2354,6 +2702,14 @@ def normalize_cfg(cfg):
     if isinstance(cfg.get('joinery'), dict):
         joinery.update(cfg['joinery'])
     out['joinery'] = joinery
+    tamp = dict(TAMPONAMENTO)
+    if isinstance(cfg.get('tamponamento'), dict):
+        tamp.update(cfg['tamponamento'])
+    out['tamponamento'] = tamp
+    arremate = dict(ARREMATE)
+    if isinstance(cfg.get('arremate'), dict):
+        arremate.update(cfg['arremate'])
+    out['arremate'] = arremate
     # Per-panel fita overrides: always a fresh dict so we never alias the shared
     # DEFAULT_CFG default across cabinets.
     po = cfg.get('panel_overrides')
@@ -2379,7 +2735,8 @@ def _select_dropdown(dd, name):
 # purely cosmetic: read_cabinet_inputs reads each input by id regardless of
 # visibility, so the (default or loaded) values still drive the build.
 _CABINET_ADVANCED_IDS = ('thickness', 'shelfAlignFront', 'backGroup', 'toeKickGroup',
-                         'doorGroup', 'drawerGroup', 'joineryGroup', 'fitaGroup', 'advGroup')
+                         'doorGroup', 'drawerGroup', 'joineryGroup', 'tamponamentoGroup',
+                         'arremateGroup', 'fitaGroup', 'advGroup')
 
 
 def _apply_cabinet_advanced_visibility(inputs, visible):
@@ -2388,6 +2745,21 @@ def _apply_cabinet_advanced_visibility(inputs, visible):
         item = inputs.itemById(cid)
         if item:
             item.isVisible = bool(visible)
+
+
+def _apply_arremate_top_mode_visibility(inputs):
+    """Show only the field that matches the chosen sanefa-measurement mode: the
+    'Folga ate o teto' input for 'gap', the 'Altura do teto' input for 'ceiling'."""
+    dd = inputs.itemById('arrTopMode')
+    if not dd or not dd.selectedItem:
+        return
+    by_ceiling = _arremate_top_mode_value(dd.selectedItem.name) == 'ceiling'
+    gap_in = inputs.itemById('arrTopGap')
+    ceil_in = inputs.itemById('arrCeilingHeight')
+    if gap_in:
+        gap_in.isVisible = not by_ceiling
+    if ceil_in:
+        ceil_in.isVisible = by_ceiling
 
 
 def add_cabinet_inputs(inputs, cfg):
@@ -2420,6 +2792,13 @@ def add_cabinet_inputs(inputs, cfg):
     group.isExpanded = True
     g = group.children
     g.addBoolValueInput('withBack', 'Add back panel', True, '', bool(cfg['with_back']))
+    back_mode_dd = g.addDropDownCommandInput(
+        'backMode', 'Fixacao do fundo', adsk.core.DropDownStyles.TextListDropDownStyle)
+    _cur_back_mode = _back_mode_choice_label(cfg.get('back_mode', 'groove'))
+    for (_v, lbl) in BACK_MODE_CHOICES:
+        back_mode_dd.listItems.add(lbl, lbl == _cur_back_mode)
+    if not back_mode_dd.selectedItem:
+        back_mode_dd.listItems.item(0).isSelected = True
     back_mat = g.addDropDownCommandInput(
         'backMaterial', 'Material do fundo', adsk.core.DropDownStyles.TextListDropDownStyle)
     for (name, _thk) in get_materials():
@@ -2514,6 +2893,66 @@ def add_cabinet_inputs(inputs, cfg):
     jg.addBoolValueInput('joinerySidesToFloor', 'Laterais ate o piso (pes laterais)',
                          True, '', bool(joinery.get('sides_to_floor', False)))
 
+    # Tamponamento (acabamento): applied finish panels over exposed faces (left /
+    # right side + top). Adds to the envelope; interior unaffected. Blank material
+    # inherits the carcass material. Gated behind Configuracao avancada.
+    tamp = cfg.get('tamponamento', TAMPONAMENTO)
+    tp_group = inputs.addGroupCommandInput('tamponamentoGroup', 'Tamponamento (acabamento)')
+    tp_group.isExpanded = False
+    tp = tp_group.children
+    tp.addBoolValueInput('tampLeft', 'Lado esquerdo', True, '', bool(tamp.get('left', False)))
+    tp.addBoolValueInput('tampRight', 'Lado direito', True, '', bool(tamp.get('right', False)))
+    tp.addBoolValueInput('tampTop', 'Superior', True, '', bool(tamp.get('top', False)))
+    tp.addValueInput('tampThickness', 'Espessura', 'mm',
+                     adsk.core.ValueInput.createByReal(float(tamp.get('t', 18.0)) / 10.0))
+    tp.addValueInput('tampFrontOverhang', 'Avanco frontal', 'mm',
+                     adsk.core.ValueInput.createByReal(float(tamp.get('front_overhang', 0.0)) / 10.0))
+    tp_mat = tp.addDropDownCommandInput(
+        'tampMaterial', 'Material', adsk.core.DropDownStyles.TextListDropDownStyle)
+    tp_mat.listItems.add('(mesmo do corpo)', not tamp.get('material'))
+    for (name, _thk) in get_materials():
+        tp_mat.listItems.add(name, name == tamp.get('material'))
+    if not tp_mat.selectedItem:
+        tp_mat.listItems.item(0).isSelected = True
+
+    # Arremate (ajuste): scribe / gap-filler pieces to reach an uncertain ceiling
+    # (sanefa superior) and/or side walls (reguas laterais). Adds to the envelope;
+    # interior unaffected. Blank material inherits the carcass. Cut oversized and
+    # trimmed on site. Gated behind Configuracao avancada.
+    arr = cfg.get('arremate', ARREMATE)
+    ar_group = inputs.addGroupCommandInput('arremateGroup', 'Arremate (ajuste ate teto/parede)')
+    ar_group.isExpanded = False
+    ar = ar_group.children
+    ar.addBoolValueInput('arrTop', 'Sanefa superior (ate o teto)', True, '', bool(arr.get('top', False)))
+    # Gap input mode: enter the measured gap directly, or the room's total ceiling
+    # height and have the gap computed (ceiling_height - H). Only one field shows.
+    ar_mode = ar.addDropDownCommandInput(
+        'arrTopMode', 'Medida da sanefa', adsk.core.DropDownStyles.TextListDropDownStyle)
+    _cur_arr_mode = _arremate_top_mode_label(arr.get('top_gap_mode', 'gap'))
+    for (_v, _lbl) in ARREMATE_TOP_MODE_CHOICES:
+        ar_mode.listItems.add(_lbl, _lbl == _cur_arr_mode)
+    ar.addValueInput('arrTopGap', 'Folga ate o teto', 'mm',
+                     adsk.core.ValueInput.createByReal(float(arr.get('top_gap', 50.0)) / 10.0))
+    ar.addValueInput('arrCeilingHeight', 'Altura do teto (piso->teto)', 'mm',
+                     adsk.core.ValueInput.createByReal(float(arr.get('ceiling_height', 2400.0)) / 10.0))
+    ar.addBoolValueInput('arrTopInline', 'Sanefa faceada com as frentes', True, '',
+                         bool(arr.get('top_inline_fronts', False)))
+    ar.addBoolValueInput('arrTopUShape', 'Sanefa em U (retornos laterais)', True, '',
+                         bool(arr.get('top_side_returns', True)))
+    ar.addBoolValueInput('arrLeft', 'Regua esquerda (ate a parede)', True, '', bool(arr.get('left', False)))
+    ar.addBoolValueInput('arrRight', 'Regua direita (ate a parede)', True, '', bool(arr.get('right', False)))
+    ar.addValueInput('arrSideGap', 'Folga ate a parede (cada lado)', 'mm',
+                     adsk.core.ValueInput.createByReal(float(arr.get('side_gap', 30.0)) / 10.0))
+    ar.addValueInput('arrThickness', 'Espessura', 'mm',
+                     adsk.core.ValueInput.createByReal(float(arr.get('t', 18.0)) / 10.0))
+    ar_mat = ar.addDropDownCommandInput(
+        'arrMaterial', 'Material', adsk.core.DropDownStyles.TextListDropDownStyle)
+    ar_mat.listItems.add('(mesmo do corpo)', not arr.get('material'))
+    for (name, _thk) in get_materials():
+        ar_mat.listItems.add(name, name == arr.get('material'))
+    if not ar_mat.selectedItem:
+        ar_mat.listItems.item(0).isSelected = True
+
     # Edge banding (fita) — its own group (not buried in Advanced), since which
     # edges get taped and how thick is a primary cut-list decision. Two editable
     # tape names (0.4mm / 1mm) plus the thickness per part group: 'carcass' = the
@@ -2566,6 +3005,8 @@ def add_cabinet_inputs(inputs, cfg):
 
     # Start collapsed/clean; the advancedMode toggle reveals everything above.
     _apply_cabinet_advanced_visibility(inputs, adv_mode.value)
+    # Show only the arremate gap field matching the chosen measurement mode.
+    _apply_arremate_top_mode_visibility(inputs)
 
 
 def read_cabinet_inputs(inputs):
@@ -2589,6 +3030,7 @@ def read_cabinet_inputs(inputs):
         'shelf_align_front': inputs.itemById('shelfAlignFront').value,
         'material': inputs.itemById('material').selectedItem.name,
         'with_back': inputs.itemById('withBack').value,
+        'back_mode': _back_mode_choice_value(inputs.itemById('backMode').selectedItem.name),
         'back_material': inputs.itemById('backMaterial').selectedItem.name,
         'back_t': inputs.itemById('backThickness').value * 10.0,
         'dado_depth': inputs.itemById('dadoDepth').value * 10.0,
@@ -2640,6 +3082,30 @@ def read_cabinet_inputs(inputs):
             'top_overhang': inputs.itemById('joineryTopOverhang').value * 10.0,
             'sides_to_floor': inputs.itemById('joinerySidesToFloor').value,
         },
+        'tamponamento': {
+            'left': inputs.itemById('tampLeft').value,
+            'right': inputs.itemById('tampRight').value,
+            'top': inputs.itemById('tampTop').value,
+            't': inputs.itemById('tampThickness').value * 10.0,
+            'front_overhang': inputs.itemById('tampFrontOverhang').value * 10.0,
+            # First list item ('(mesmo do corpo)') means inherit -> store ''.
+            'material': ('' if inputs.itemById('tampMaterial').selectedItem.name == '(mesmo do corpo)'
+                         else inputs.itemById('tampMaterial').selectedItem.name),
+        },
+        'arremate': {
+            'top': inputs.itemById('arrTop').value,
+            'top_gap_mode': _arremate_top_mode_value(inputs.itemById('arrTopMode').selectedItem.name),
+            'top_gap': inputs.itemById('arrTopGap').value * 10.0,
+            'ceiling_height': inputs.itemById('arrCeilingHeight').value * 10.0,
+            'top_inline_fronts': inputs.itemById('arrTopInline').value,
+            'top_side_returns': inputs.itemById('arrTopUShape').value,
+            'left': inputs.itemById('arrLeft').value,
+            'right': inputs.itemById('arrRight').value,
+            'side_gap': inputs.itemById('arrSideGap').value * 10.0,
+            't': inputs.itemById('arrThickness').value * 10.0,
+            'material': ('' if inputs.itemById('arrMaterial').selectedItem.name == '(mesmo do corpo)'
+                         else inputs.itemById('arrMaterial').selectedItem.name),
+        },
     }
 
 
@@ -2653,6 +3119,7 @@ def write_cabinet_inputs(inputs, cfg):
     inputs.itemById('shelfAlignFront').value = bool(cfg.get('shelf_align_front', False))
     _select_dropdown(inputs.itemById('material'), cfg['material'])
     inputs.itemById('withBack').value = bool(cfg['with_back'])
+    _select_dropdown(inputs.itemById('backMode'), _back_mode_choice_label(cfg.get('back_mode', 'groove')))
     _select_dropdown(inputs.itemById('backMaterial'), cfg['back_material'])
     inputs.itemById('backThickness').value = cfg['back_t'] / 10.0
     inputs.itemById('dadoDepth').value = cfg['dado_depth'] / 10.0
@@ -2704,6 +3171,28 @@ def write_cabinet_inputs(inputs, cfg):
                      _joinery_choice_label(joinery.get('top_mode', 'aligned')))
     inputs.itemById('joineryTopOverhang').value = float(joinery.get('top_overhang', 0.0)) / 10.0
     inputs.itemById('joinerySidesToFloor').value = bool(joinery.get('sides_to_floor', False))
+    tamp = cfg.get('tamponamento', TAMPONAMENTO)
+    inputs.itemById('tampLeft').value = bool(tamp.get('left', False))
+    inputs.itemById('tampRight').value = bool(tamp.get('right', False))
+    inputs.itemById('tampTop').value = bool(tamp.get('top', False))
+    inputs.itemById('tampThickness').value = float(tamp.get('t', 18.0)) / 10.0
+    inputs.itemById('tampFrontOverhang').value = float(tamp.get('front_overhang', 0.0)) / 10.0
+    _select_dropdown(inputs.itemById('tampMaterial'),
+                     tamp.get('material') or '(mesmo do corpo)')
+    arr = cfg.get('arremate', ARREMATE)
+    inputs.itemById('arrTop').value = bool(arr.get('top', False))
+    _select_dropdown(inputs.itemById('arrTopMode'),
+                     _arremate_top_mode_label(arr.get('top_gap_mode', 'gap')))
+    inputs.itemById('arrTopGap').value = float(arr.get('top_gap', 50.0)) / 10.0
+    inputs.itemById('arrCeilingHeight').value = float(arr.get('ceiling_height', 2400.0)) / 10.0
+    inputs.itemById('arrTopInline').value = bool(arr.get('top_inline_fronts', False))
+    inputs.itemById('arrTopUShape').value = bool(arr.get('top_side_returns', True))
+    inputs.itemById('arrLeft').value = bool(arr.get('left', False))
+    inputs.itemById('arrRight').value = bool(arr.get('right', False))
+    inputs.itemById('arrSideGap').value = float(arr.get('side_gap', 30.0)) / 10.0
+    inputs.itemById('arrThickness').value = float(arr.get('t', 18.0)) / 10.0
+    _select_dropdown(inputs.itemById('arrMaterial'),
+                     arr.get('material') or '(mesmo do corpo)')
 
 
 def validate_cfg(cfg):
@@ -2713,19 +3202,25 @@ def validate_cfg(cfg):
     if W <= 2 * t or H <= 2 * t:
         return 'Largura and Altura must be larger than twice the thickness.'
     if cfg['with_back']:
-        dd, bt, sb = cfg['dado_depth'], cfg['back_t'], cfg['back_setback']
-        bc = cfg['tol']['dado_bottom_clearance']
-        sc = cfg['tol']['dado_side_clearance']
-        if dd <= 0 or dd >= t:
-            return 'Ranhura depth must be > 0 and less than the carcass thickness ({0:.0f}mm).'.format(t)
+        bt = cfg['back_t']
         if bt <= 0:
             return 'Back panel thickness must be greater than 0.'
-        if bc < 0 or bc >= dd:
-            return 'Folga do fundo da ranhura must be >= 0 and less than the ranhura depth ({0:.1f}mm).'.format(dd)
-        if sc < 0 or sb < sc:
-            return 'Folga lateral da ranhura must be >= 0 and no larger than the back setback.'
-        if sb < 0 or sb + bt > D:
-            return 'Back panel (recuo + espessura) does not fit within the depth.'
+        # Groove (encaixado) mode only: the dado geometry must fit the depth. An
+        # overlay (sobreposto) back is applied flush to the rear and extends
+        # behind, so it has no grooves and consumes no interior depth.
+        if cfg.get('back_mode', 'groove') != 'overlay':
+            sb = cfg['back_setback']
+            dd = cfg['dado_depth']
+            bc = cfg['tol']['dado_bottom_clearance']
+            sc = cfg['tol']['dado_side_clearance']
+            if dd <= 0 or dd >= t:
+                return 'Ranhura depth must be > 0 and less than the carcass thickness ({0:.0f}mm).'.format(t)
+            if bc < 0 or bc >= dd:
+                return 'Folga do fundo da ranhura must be >= 0 and less than the ranhura depth ({0:.1f}mm).'.format(dd)
+            if sc < 0 or sb < sc:
+                return 'Folga lateral da ranhura must be >= 0 and no larger than the back setback.'
+            if sb < 0 or sb + bt > D:
+                return 'Back panel (recuo + espessura) does not fit within the depth.'
     if cfg['with_toe_kick']:
         kkh, kks, kkt = cfg['toe_kick_height'], cfg['toe_kick_setback'], cfg['toe_kick_t']
         kms = cfg['toe_kick_max_span']
@@ -2747,6 +3242,27 @@ def validate_cfg(cfg):
             return "Fixacao lateral: modo invalido (use 'aligned' ou 'over')."
         if float(jn.get(side + '_overhang', 0.0)) < 0:
             return 'Fixacao lateral: o avanco (overhang) deve ser >= 0.'
+    # Tamponamento (acabamento): a positive thickness is required when any face is on.
+    tp = cfg.get('tamponamento', {})
+    if tp.get('left') or tp.get('right') or tp.get('top'):
+        if float(tp.get('t', 0.0)) <= 0:
+            return 'Espessura do tamponamento deve ser maior que zero.'
+        if float(tp.get('front_overhang', 0.0)) < 0:
+            return 'Avanco frontal do tamponamento deve ser >= 0.'
+    # Arremate (ajuste): positive thickness + a positive gap for each enabled piece.
+    ar = cfg.get('arremate', {})
+    if ar.get('left') or ar.get('right') or ar.get('top'):
+        if float(ar.get('t', 0.0)) <= 0:
+            return 'Espessura do arremate deve ser maior que zero.'
+    if ar.get('top'):
+        if ar.get('top_gap_mode') == 'ceiling':
+            if float(ar.get('ceiling_height', 0.0)) <= float(cfg.get('H', 0.0)):
+                return ('Altura do teto deve ser maior que a altura do armario '
+                        '(para haver folga da sanefa).')
+        elif float(ar.get('top_gap', 0.0)) <= 0:
+            return 'Folga do arremate superior (ate o teto) deve ser maior que zero.'
+    if (ar.get('left') or ar.get('right')) and float(ar.get('side_gap', 0.0)) <= 0:
+        return 'Folga do arremate lateral (ate a parede) deve ser maior que zero.'
     # Interior layout: walk the region tree (same planner the builder uses, so a
     # split that validates always builds) and check that each leaf fits its band.
     kick_h = cfg['toe_kick_height'] if cfg['with_toe_kick'] else 0.0
@@ -2755,7 +3271,8 @@ def validate_cfg(cfg):
         return 'Altura leaves no clear interior height for the carcass.'
     Wc, Hbox_c, tc = W / 10.0, Hbox / 10.0, t / 10.0
     z_off = kick_h / 10.0
-    back_front_y = (D - cfg['back_setback'] - cfg['back_t']) if cfg['with_back'] else D
+    back_front_y = (D - cfg['back_setback'] - cfg['back_t']) \
+        if (cfg['with_back'] and cfg.get('back_mode', 'groove') != 'overlay') else D
     root_band = _Band(tc, Wc - tc, z_off + tc, z_off + Hbox_c - tc,
                       tc, tc, tc, tc, 'L', 'R')
     try:
@@ -2776,7 +3293,8 @@ def _validate_leaf(band, node, cfg):
     W, H, D, t = cfg['W'], cfg['H'], cfg['D'], cfg['t']
     band_w_mm = (band.x1 - band.x0) * 10.0
     band_h_mm = (band.z1 - band.z0) * 10.0
-    back_front_y = (D - cfg['back_setback'] - cfg['back_t']) if cfg['with_back'] else D
+    back_front_y = (D - cfg['back_setback'] - cfg['back_t']) \
+        if (cfg['with_back'] and cfg.get('back_mode', 'groove') != 'overlay') else D
 
     if typ == 'shelves':
         n = node['count']
@@ -2871,6 +3389,23 @@ def _validate_leaf(band, node, cfg):
                     '< {0:.0f}mm so the box clears the runners).'.format(deduction / 2.0))
         return None
 
+    if typ == 'blind':
+        gap = cfg['door_gap'] if node.get('gap') is None else node['gap']
+        inset = node.get('inset', False)
+        if inset:
+            region_w, region_h = band_w_mm, band_h_mm
+        else:
+            region_w = ((band.x1 + band.ext_r) - (band.x0 - band.ext_l)) * 10.0
+            region_h = ((band.z1 + band.ext_t) - (band.z0 - band.ext_b)) * 10.0
+        if cfg['door_t'] <= 0:
+            return 'Espessura da frente (painel cego) must be greater than 0.'
+        if gap < 0:
+            return 'Folga do painel cego must be >= 0.'
+        if region_w - 2 * gap <= 0 or region_h - 2 * gap <= 0:
+            return ('A folga é maior que a região para o painel cego. Reduza a '
+                    'folga ou aumente a região.')
+        return None
+
     return None  # 'open'
 
 
@@ -2907,6 +3442,8 @@ class NewCabinetInputChangedHandler(adsk.core.InputChangedEventHandler):
         try:
             if args.input.id == 'advancedMode':
                 _apply_cabinet_advanced_visibility(args.inputs, args.input.value)
+            elif args.input.id == 'arrTopMode':
+                _apply_arremate_top_mode_visibility(args.inputs)
         except:
             if ui:
                 ui.messageBox('New Cabinet input failed:\n{}'.format(traceback.format_exc()))
@@ -3001,11 +3538,15 @@ class EditCabinetInputChangedHandler(adsk.core.InputChangedEventHandler):
             if cid == 'advancedMode':
                 _apply_cabinet_advanced_visibility(args.inputs, args.input.value)
                 return
+            if cid == 'arrTopMode':
+                _apply_arremate_top_mode_visibility(args.inputs)
+                return
             if cid != 'cabinetPick':
                 return
             idx = args.input.selectedItem.index
             if 0 <= idx < len(_edit_cabinets):
                 write_cabinet_inputs(args.inputs, _edit_cabinets[idx][1])
+                _apply_arremate_top_mode_visibility(args.inputs)
         except:
             if ui:
                 ui.messageBox('Edit Cabinet input failed:\n{}'.format(traceback.format_exc()))
@@ -3740,13 +4281,17 @@ class PreferencesCreatedHandler(adsk.core.CommandCreatedEventHandler):
 # Add-in lifecycle
 # -----------------------------------------------------------------------------
 def _add_command(panel, cmd_id, name, desc, created_handler, icon_name, promoted=False):
+    resource_folder = res(icon_name)
     cmd_def = ui.commandDefinitions.itemById(cmd_id)
     if not cmd_def:
-        resource_folder = res(icon_name)
         if resource_folder:
             cmd_def = ui.commandDefinitions.addButtonDefinition(cmd_id, name, desc, resource_folder)
         else:
             cmd_def = ui.commandDefinitions.addButtonDefinition(cmd_id, name, desc)
+    elif resource_folder:
+        # A definition left over from a previous session keeps its old icon;
+        # re-point it so icon changes take effect without restarting Fusion.
+        cmd_def.resourceFolder = resource_folder
     cmd_def.commandCreated.add(created_handler)
     handlers.append(created_handler)
     control = panel.controls.addCommand(cmd_def)
@@ -3776,22 +4321,20 @@ def run(context):
                      NewPanelCreatedHandler(), 'new_panel')
         _add_command(panel, EDIT_PANEL_CMD_ID, 'Edit Panel',
                      'Edit a panel\'s edge banding (fita) in place',
-                     EditPanelCreatedHandler(), 'new_panel')
-        _add_command(panel, NEW_CABINET_CMD_ID, 'New Cabinet',
-                     'Create a cabinet carcass with shelves',
-                     NewCabinetCreatedHandler(), 'new_cabinet', promoted=True)
+                     EditPanelCreatedHandler(), 'edit_panel')
+        # New Cabinet is created via the Cabinet Layout HTML palette (no ribbon command).
         _add_command(panel, EDIT_CABINET_CMD_ID, 'Edit Cabinet',
                      'Edit a cabinet and regenerate it',
                      EditCabinetCreatedHandler(), 'edit_cabinet', promoted=True)
         _add_command(panel, LAYOUT_CMD_ID, 'Cabinet Layout',
                      'Visually divide the cabinet interior into regions',
-                     CabinetLayoutCreatedHandler(), 'edit_cabinet', promoted=True)
+                     CabinetLayoutCreatedHandler(), 'cabinet_layout', promoted=True)
         _add_command(panel, EXPORT_CMD_ID, 'Export Cut List',
                      'Export all panels as a CorteCloud CSV',
                      ExportCutListCreatedHandler(), 'export', promoted=True)
         _add_command(panel, PREFS_CMD_ID, 'Preferences',
                      'Edit the material library and default cabinet parameters',
-                     PreferencesCreatedHandler(), 'new_panel')
+                     PreferencesCreatedHandler(), 'preferences', promoted=True)
 
         # Add "Edit Cabinet" to the right-click menu when a cabinet is clicked.
         global _marking_menu_handler
@@ -3829,7 +4372,7 @@ def stop(context):
         if tab:
             panel = tab.toolbarPanels.itemById(PANEL_ID)
             if panel:
-                for cmd_id in (NEW_PANEL_CMD_ID, EDIT_PANEL_CMD_ID, NEW_CABINET_CMD_ID,
+                for cmd_id in (NEW_PANEL_CMD_ID, EDIT_PANEL_CMD_ID,
                                EDIT_CABINET_CMD_ID, LAYOUT_CMD_ID, EXPORT_CMD_ID, PREFS_CMD_ID):
                     ctrl = panel.controls.itemById(cmd_id)
                     if ctrl:
@@ -3837,7 +4380,8 @@ def stop(context):
                 panel.deleteMe()
             tab.deleteMe()
 
-        for cmd_id in (NEW_PANEL_CMD_ID, EDIT_PANEL_CMD_ID, EXPORT_CMD_ID, PREFS_CMD_ID):
+        for cmd_id in (NEW_PANEL_CMD_ID, EDIT_PANEL_CMD_ID, EDIT_CABINET_CMD_ID,
+                       LAYOUT_CMD_ID, EXPORT_CMD_ID, PREFS_CMD_ID):
             cmd_def = ui.commandDefinitions.itemById(cmd_id)
             if cmd_def:
                 cmd_def.deleteMe()
