@@ -496,6 +496,7 @@
            tampo). Cada face ligada acrescenta um painel <b>por fora</b> da estrutura, aumentando
            as dimensões externas. As laterais vão do piso ao topo em toda a profundidade; o tampo
            cobre toda a largura acabada. O interior não é afetado.</p>
+        <div class="dg-anchor" data-diagram="tamponamento"></div>
         <div class="row"><label>Lado esquerdo</label>
           <span class="sw"><input type="checkbox" id="tampLeft"><span class="track"></span></span></div>
         <div class="row"><label>Lado direito</label>
@@ -523,6 +524,7 @@
            teto (dá aparência de altura total); as <b>réguas</b> laterais preenchem a folga até a
            parede. Ficam <b>por fora</b> da carcaça (aumentam as dimensões externas); o interior
            não é afetado.</p>
+        <div class="dg-anchor" data-diagram="arremate"></div>
         <div class="row"><label>Sanefa superior (até o teto)</label>
           <span class="sw"><input type="checkbox" id="arrTop"><span class="track"></span></span></div>
         <div class="row"><label>Medida da sanefa</label>
@@ -571,6 +573,19 @@
         <div class="subhead">Gavetas</div>
         <div class="dg-anchor" data-diagram="drawers"></div>
         <div class="row"><label>Corrediça</label><select id="slide_key" class="grow"></select></div>
+        <p class="hint" id="slideInfo"></p>
+        <div class="row"><label>Personalizar medidas da corrediça</label>
+          <span class="sw"><input type="checkbox" id="slide_custom"><span class="track"></span></span></div>
+        <div class="row"><label>Espaço lateral (por lado)</label>
+          <div class="field"><input type="number" id="slide_side_space" step="0.1" min="0"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Folga sob a caixa</label>
+          <div class="field"><input type="number" id="slide_bottom_clearance" step="0.5" min="0"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Folga no fundo (caixa↔fundo)</label>
+          <div class="field"><input type="number" id="slide_back_clearance" step="0.5" min="0"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Profundidade da caixa</label>
+          <div class="field"><input type="number" id="slide_box_depth" step="10" min="0"><span class="unit">mm</span></div></div>
+        <div class="row"><label>Profundidade mínima do armário</label>
+          <div class="field"><input type="number" id="slide_min_cabinet_depth" step="10" min="0"><span class="unit">mm</span></div></div>
         <div class="row"><label>Material da caixa</label><select id="drawer_box_material" class="grow"></select></div>
         <div class="row"><label>Material da frente</label><select id="drawer_face_material" class="grow"></select></div>
         <div class="row"><label>Espessura da frente</label>
@@ -1043,9 +1058,39 @@ function syncFormFromCfg(){
              ar.material||"(mesmo do corpo)");
   // Fixação do fundo (back-panel mounting mode): groove vs overlay.
   var bmEl=byId("back_mode"); if(bmEl) bmEl.value = c.back_mode||"groove";
+  syncSlideFields();
   renderJoineryDiagram();
   renderBackDiagram();
   renderArremateMode();
+}
+/* Corrediça: the five mounting measurements. While "Personalizar" is off they are
+   a read-only readout of the chosen slide from the hardware library; ticking it
+   makes them editable and authoritative for this cabinet (cfg.slide.custom). */
+var SLIDE_FIELDS = ["side_space","bottom_clearance","back_clearance",
+                    "box_depth","min_cabinet_depth"];
+function slideSpecFor(key){
+  for (var i=0;i<state.slides.length;i++) if (state.slides[i].key===key) return state.slides[i];
+  return state.slides[0] || null;
+}
+function syncSlideFields(){
+  var c = state.cfg, sl = c.slide || (c.slide = {}), custom = !!sl.custom;
+  var cb = byId("slide_custom"); if (cb) cb.checked = custom;
+  var spec = slideSpecFor(c.slide_key);
+  SLIDE_FIELDS.forEach(function(k){
+    var el = byId("slide_"+k); if(!el) return;
+    var v = custom ? sl[k] : (spec ? spec[k] : null);
+    if (v!=null) el.value = v;
+    el.disabled = !custom;
+  });
+  var info = byId("slideInfo");
+  if (info){
+    if (!spec){ info.textContent = ""; return; }
+    info.textContent = (spec.mount==="side"
+      ? "Montagem lateral: a corrediça ocupa " + spec.side_space + " mm de cada lado, entre a lateral do móvel e a caixa."
+      : "Montagem oculta (sob a gaveta): ocupa " + spec.side_space + " mm de cada lado e " +
+        spec.bottom_clearance + " mm sob a caixa.")
+      + " Profundidade mínima do armário: " + spec.min_cabinet_depth + " mm.";
+  }
 }
 // Sanefa measurement mode: show only the relevant input (measured gap vs total
 // ceiling height) and, in ceiling mode, a live readout of the derived gap
@@ -1073,6 +1118,13 @@ function readCfgFromForm(){
   TEXTS.forEach(function(k){ var el=byId(k); if(el) c[k] = el.value; });
   SELS.forEach(function(k){ var el=byId(k); if(el) c[k] = el.value; });
   var sk=byId("slide_key"); if(sk) c.slide_key = sk.value;
+  // Corrediça: the measurements ride along even while "Personalizar" is off (the
+  // add-in then ignores them and uses the library spec).
+  if(!c.slide) c.slide = {};
+  var sc=byId("slide_custom"); if(sc) c.slide.custom = sc.checked;
+  SLIDE_FIELDS.forEach(function(k){
+    var el=byId("slide_"+k); if(el) c.slide[k] = parseFloat(el.value)||0;
+  });
   for (var id in NESTED){
     var ref=NESTED[id], el=byId(id); if(!el) continue;
     if (!c[ref[0]]) c[ref[0]] = {};
@@ -1396,7 +1448,9 @@ function wizAdvance(){
 ============================================================================ */
 function bindForm(){
   // dimensions + structure + fronts + advanced -> re-read & re-render
-  var all = NUMS.concat(BOOLS, SELS, TEXTS, ["slide_key"], Object.keys(NESTED),
+  var all = NUMS.concat(BOOLS, SELS, TEXTS, ["slide_key", "slide_custom"],
+                        SLIDE_FIELDS.map(function(k){ return "slide_"+k; }),
+                        Object.keys(NESTED),
                         ["joineryBottomMode","joineryTopMode",
                          "joineryBottomOverhang","joineryTopOverhang","joinerySidesToFloor",
                          "tampLeft","tampRight","tampTop","tampThickness","tampFrontOverhang","tampMaterial",
@@ -1404,6 +1458,10 @@ function bindForm(){
   all.forEach(function(k){
     var el=byId(k);
     if (el) el.addEventListener("change", function(){ readCfgFromForm(); render(); });
+  });
+  // Corrediça: refresh the readout/lock state when the slide or "Personalizar" changes.
+  ["slide_key","slide_custom"].forEach(function(k){
+    var el=byId(k); if(el) el.addEventListener("change", syncSlideFields);
   });
   // live diagram update while typing an overhang (the whole re-render happens on change)
   ["joineryBottomOverhang","joineryTopOverhang","joineryBottomMode","joineryTopMode"].forEach(function(k){
@@ -1532,11 +1590,13 @@ function demoCfg(){
     hinge:{cup_diameter:35,cup_depth:12,cup_edge:22.5,end_inset:100,screw_diameter:5,
            screw_depth:12,plate_front:37,screw_pitch:32,shelf_clearance:30},
     with_drawers:false, n_drawers:3, drawer_inset:false, drawer_gap:3,
-    slide_key:"hafele_matrix_invisa_a30_300", insert_real_hardware:false,
+    slide_key:"telescopica_h45_350", insert_real_hardware:false,
     drawer:{box_material:"MDF 16mm Branco",box_t:16,bottom_material:"MDF 6mm Cru",bottom_t:6,
             bottom_dado_depth:6,bottom_up:12,bottom_play:0.4,box_height:150,box_top_gap:30,
             face_material:"MDF 18mm Branco",face_t:18,
             back_height_reduction:0},
+    slide:{custom:false,side_space:12.7,bottom_clearance:3,back_clearance:10,
+           box_depth:350,min_cabinet_depth:380},
     fita:{name_thin:"Fita PVC 0.4mm Branco",name_thick:"Fita PVC 1mm Branco",
           carcass:"thin",fronts:"thick"},
     joinery:{bottom_mode:"aligned",bottom_overhang:0,top_mode:"aligned",top_overhang:0,sides_to_floor:false},
@@ -1551,8 +1611,16 @@ function demoCfg(){
 function enterDemo(){
   state.demo = true;
   state.materials = ["MDF 18mm Branco","MDF 15mm Branco","MDF 16mm Branco","MDF 6mm Cru","MDP 18mm Branco"];
-  state.slides = [{key:"hafele_matrix_invisa_a30_300",
-                   desc:"Corrediça oculta Häfele Matrix Invisa A30 GT2 300mm"}];
+  state.slides = [
+    {key:"telescopica_h45_350", desc:"Corrediça telescópica H45 350mm (ext. total, lateral)",
+     mount:"side", side_space:12.7, bottom_clearance:3, back_clearance:10,
+     box_depth:350, min_cabinet_depth:380},
+    {key:"roldana_400", desc:"Corrediça de roldana 400mm (ext. parcial, lateral)",
+     mount:"side", side_space:12.5, bottom_clearance:3, back_clearance:10,
+     box_depth:400, min_cabinet_depth:430},
+    {key:"oculta_softclose_400", desc:"Corrediça oculta soft-close 400mm (ext. total, sob a gaveta)",
+     mount:"undermount", side_space:6.5, bottom_clearance:13, back_clearance:20,
+     box_depth:400, min_cabinet_depth:420}];
   state.cabinets = []; state.cfg = demoCfg(); state.target="new"; state.sel=null;
   byId("demoBanner").classList.add("show");
   fillTargets(); render();
@@ -1652,6 +1720,82 @@ var DIAGRAMS = {
     + _dimH(194,220,184,"recuo")
     + _lead(189,124,189,112,"esp.",189,120)
   },
+  /* Front elevation: the applied finishing panels sit OUTSIDE the carcass (left /
+     right / top), so the external envelope grows; plus a side section showing how
+     far they jut out at the front. */
+  tamponamento:{ vb:"0 0 260 280", cap:
+    "Painéis aplicados por fora do corpo: cada lado ligado aumenta a largura em uma "
+    + "espessura e o superior aumenta a altura. As laterais vão do piso ao topo; o "
+    + "superior cobre toda a largura acabada. Avanço frontal = quanto o painel avança "
+    + "à frente (0 = faceado); a traseira fica sempre alinhada com o fundo.",
+    svg:
+    // front elevation — carcass wrapped by the three applied panels
+      '<rect class="pnl"  x="62"  y="46" width="136" height="122"/>'
+    + '<rect class="pnl2" x="50"  y="46" width="12"  height="122"/>'   // esquerdo
+    + '<rect class="pnl2" x="198" y="46" width="12"  height="122"/>'   // direito
+    + '<rect class="pnl2" x="50"  y="34" width="160" height="12"/>'    // superior
+    + '<line class="floor" x1="26" y1="168" x2="234" y2="168"/>'
+    + '<text class="lbl-m" x="130" y="28">tamponamento superior</text>'
+    + '<text class="lbl-m" x="130" y="112">corpo</text>'
+    + '<text class="lbl-m" x="42" y="112" transform="rotate(-90 42 112)">tamponamento</text>'
+    + '<line class="dim" x1="50" y1="170" x2="50" y2="186"/>'
+    + '<line class="dim" x1="62" y1="170" x2="62" y2="186"/>'
+    + _dimH(50,62,186,"esp.")
+    + '<line class="dim" x1="212" y1="34" x2="234" y2="34"/>'
+    + '<line class="dim" x1="212" y1="46" x2="234" y2="46"/>'
+    + _dimV(234,34,46,"esp.")
+    // top view — panel runs the full depth and juts out past the front
+    + '<text class="lbl-m" x="130" y="201">vista de cima — avanço frontal</text>'
+    + '<line class="dim" x1="74" y1="222" x2="74" y2="250"/>'
+    + '<line class="dim" x1="92" y1="222" x2="92" y2="228"/>'
+    + _dimH(74,92,222,"avanço")
+    + '<rect class="pnl"  x="92" y="228" width="118" height="22"/>'
+    + '<rect class="pnl2" x="74" y="250" width="136" height="10"/>'
+    + '<text class="lbl-m" x="151" y="242">corpo</text>'
+    + '<text class="lbl-m" x="64" y="239" transform="rotate(-90 64 239)">frente</text>'
+    + '<text class="lbl-m" x="140" y="274">traseira alinhada com o fundo</text>'
+  },
+  /* Front elevation: the top valance (sanefa) closing the gap to the ceiling and
+     the side scribe strips (réguas) closing the gap to the walls — all applied
+     OUTSIDE the carcass; plus a top view of the U-shaped sanefa. */
+  arremate:{ vb:"0 0 260 304", cap:
+    "Sanefa: peça frontal do topo do armário até o teto — altura = folga até o teto "
+    + "(ou altura do teto − H). Réguas: peças frontais laterais com a largura da folga "
+    + "até a parede, do piso ao teto. Sanefa em U acrescenta um retorno de profundidade "
+    + "total sobre cada lateral. Todas cortadas com sobra e ajustadas no local.",
+    svg:
+    // room envelope: ceiling, floor and the two side walls
+      '<line class="floor" x1="24" y1="30"  x2="236" y2="30"/>'
+    + '<line class="floor" x1="24" y1="210" x2="236" y2="210"/>'
+    + '<line class="floor" x1="44"  y1="22" x2="44"  y2="218"/>'
+    + '<line class="floor" x1="216" y1="22" x2="216" y2="218"/>'
+    + '<rect class="pnl"  x="62"  y="74" width="136" height="136"/>'   // armário
+    + '<rect class="pnl2" x="62"  y="30" width="136" height="44"/>'    // sanefa
+    + '<rect class="pnl2" x="44"  y="30" width="18"  height="180"/>'   // régua esq.
+    + '<rect class="pnl2" x="198" y="30" width="18"  height="180"/>'   // régua dir.
+    + '<text class="lbl-m" x="32"  y="24">teto</text>'
+    + '<text class="lbl-m" x="200" y="224">piso</text>'
+    + '<text class="lbl-m" x="100" y="58">sanefa</text>'
+    + '<text class="lbl-m" x="130" y="145">armário</text>'
+    + '<text class="lbl-m" x="53"  y="140" transform="rotate(-90 53 140)">régua</text>'
+    + '<text class="lbl-m" x="207" y="140" transform="rotate(-90 207 140)">régua</text>'
+    + '<text class="lbl-m" x="32"  y="120" transform="rotate(-90 32 120)">parede</text>'
+    + '<text class="lbl-m" x="228" y="120" transform="rotate(-90 228 120)">parede</text>'
+    + _dimV(162,30,74,"folga teto")
+    + '<line class="dim" x1="44" y1="212" x2="44" y2="226"/>'
+    + '<line class="dim" x1="62" y1="212" x2="62" y2="226"/>'
+    + _dimH(44,62,226,"folga parede")
+    // top view — the sanefa closed into a U by a return over each side
+    + '<text class="lbl-m" x="130" y="252">sanefa em U — vista de cima</text>'
+    + '<rect class="open" x="76"  y="262" width="108" height="34" stroke-dasharray="4 3"/>'
+    + '<rect class="pnl2" x="76"  y="262" width="10"  height="34"/>'
+    + '<rect class="pnl2" x="174" y="262" width="10"  height="34"/>'
+    + '<rect class="pnl2" x="86"  y="288" width="88"  height="8"/>'
+    + '<text class="lbl-m" x="70"  y="279" transform="rotate(-90 70 279)">retorno</text>'
+    + '<text class="lbl-m" x="190" y="279" transform="rotate(-90 190 279)">retorno</text>'
+    + '<text class="lbl-m" x="130" y="282">frente</text>'
+    + _lead(206,272,170,292,"esp.",210,268)
+  },
   doors:{ vb:"0 0 260 200", cap:
     "N portas iguais · folga = reveal entre as portas e nas bordas · espessura (door_t). "
     + "Sobreposta cobre a frente; embutida assenta no vão.",
@@ -1666,7 +1810,8 @@ var DIAGRAMS = {
   },
   drawers:{ vb:"0 0 260 200", cap:
     "N gavetas empilhadas · folga = reveal entre as frentes · frente (face_t), "
-    + "caixa (box_t) e fundo da gaveta (bottom_t). A corrediça define a dedução da caixa.",
+    + "caixa (box_t) e fundo da gaveta (bottom_t). A corrediça ocupa um espaço de cada "
+    + "lado (lateral ~12,5–12,7 mm · oculta ~6,5 mm): caixa = vão livre − 2× esse espaço.",
     svg:
       '<rect class="pnl"  x="40" y="20" width="180" height="160"/>'
     + '<rect class="pnl2" x="46" y="26" width="168" height="46"/>'
@@ -1674,6 +1819,7 @@ var DIAGRAMS = {
     + '<rect class="pnl2" x="46" y="126" width="168" height="46"/>'
     + '<rect x="70" y="82" width="120" height="34" fill="none" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 3"/>'
     + '<text class="lbl-m" x="130" y="102">caixa</text>'
+    + _dimH(46,70,119,"corrediça")
     + _lead(232,97,214,97,"folga",240,100)
   },
   fita:{ vb:"0 0 260 172", cap:
@@ -1801,7 +1947,13 @@ var HELP = {
   door_t:"Grossura da chapa da porta, em mm.",
   door_gap:"Fresta (reveal) entre as portas e nas bordas, em mm.",
   with_hinges:"Fura o caneco de 35 mm nas portas e os pilotos da placa nas laterais. Só geometria — não vai ao CorteCloud.",
-  slide_key:"Modelo de corrediça da biblioteca. Define a dedução da caixa e a profundidade mínima do armário.",
+  slide_key:"Modelo de corrediça da biblioteca. Define quanto espaço a corrediça ocupa (lateral ou oculta), a profundidade da caixa e a profundidade mínima do armário.",
+  slide_custom:"Ligado: as medidas abaixo valem para este armário e sobrepõem a biblioteca de ferragens. Desligado: apenas mostram as medidas da corrediça escolhida.",
+  slide_side_space:"Espaço que a corrediça ocupa de CADA lado, entre a lateral do móvel e a lateral da caixa. Lateral (roldana ~12,5 mm / telescópica ~12,7 mm); oculta ~6,5 mm. Largura da caixa = vão livre − 2× este valor.",
+  slide_bottom_clearance:"Folga sob a caixa da gaveta, em mm. A corrediça oculta trabalha nesse espaço (~13 mm); na montagem lateral basta uma folga pequena (~3 mm).",
+  slide_back_clearance:"Espaço deixado entre a traseira da caixa e o fundo do armário, em mm.",
+  slide_box_depth:"Profundidade (comprimento) da caixa da gaveta, em mm — normalmente igual ao comprimento nominal da corrediça.",
+  slide_min_cabinet_depth:"Profundidade mínima do armário exigida pela corrediça, em mm. Usada na validação antes de gerar.",
   drawer_box_material:"Chapa das laterais/travessas da caixa da gaveta.",
   drawer_face_material:"Chapa da frente da gaveta (fitada nos quatro lados).",
   drawer_face_t:"Grossura da frente da gaveta, em mm (~18 mm).",

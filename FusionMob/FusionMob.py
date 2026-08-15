@@ -25,7 +25,7 @@ import math
 
 # Add-in version (keep in sync with FusionMob.manifest). Bump the patch digit
 # (last number) on every modification — see CLAUDE.md "Versioning".
-__version__ = '1.16.3'
+__version__ = '1.18.0'
 
 app = None
 ui = None
@@ -122,6 +122,30 @@ DRAWER = {
     'face_band': 'Fita PVC 1mm Branco',  # face banded all four edges
     'back_height_reduction': 0.0,        # box back shorter than sides (0 = equal)
 }
+
+# Per-cabinet override of the chosen slide's mounting numbers, so a shop can dial
+# in the runner it actually buys without touching hardware.json (which lives in the
+# read-only install folder). Ignored entirely while 'custom' is False — the library
+# spec then wins — so the values below are just the seed the dialog shows. Every
+# field maps onto the resolved spec in resolve_slide_spec. See FALLBACK_SLIDE for
+# what each number means.
+SLIDE = {
+    'custom': False,
+    'side_space': 12.7,          # -> spec['side_space']         (espaço por lado)
+    'bottom_clearance': 3.0,     # -> spec['bottom_clearance']   (folga sob a caixa)
+    'back_clearance': 10.0,      # -> spec['back_clearance']     (folga no fundo)
+    'box_depth': 350.0,          # -> spec['recommended_box_depth']
+    'min_cabinet_depth': 380.0,  # -> spec['min_cabinet_depth']
+}
+
+# The spec fields cfg['slide'] overrides, as (override key, spec key).
+_SLIDE_OVERRIDE_FIELDS = (
+    ('side_space', 'side_space'),
+    ('bottom_clearance', 'bottom_clearance'),
+    ('back_clearance', 'back_clearance'),
+    ('box_depth', 'recommended_box_depth'),
+    ('min_cabinet_depth', 'min_cabinet_depth'),
+)
 
 
 def hinge_count_for_height(h_mm):
@@ -496,12 +520,16 @@ DEFAULT_CFG = {
     # Drawers (gavetas): a single column of N stacked drawers across the carcass
     # front. Each is a full BR-standard box + a face (overlay/inset like doors).
     # The slide hardware is chosen from the bundled manifest by key; its mounting
-    # clearances come from that spec (not stored here), so switching slides
-    # re-sizes the boxes automatically. A lightweight proxy always represents the
-    # slide; 'insert_real_hardware' additionally imports the bundled CAD model.
+    # clearances come from that spec, so switching slides re-sizes the boxes
+    # automatically — a side-mounted runner (roldana/telescópica) eats ~12,7mm of
+    # clear width per side, an undermount (oculta) ~6,5mm plus a gap under the box.
+    # cfg['slide'] can override those numbers per cabinet (see SLIDE). A lightweight
+    # proxy always represents the slide; 'insert_real_hardware' additionally imports
+    # the bundled CAD model when the chosen slide ships one.
     'with_drawers': False, 'n_drawers': 3, 'drawer_inset': False, 'drawer_gap': 3.0,
-    'slide_key': 'hafele_matrix_invisa_a30_300', 'insert_real_hardware': False,
+    'slide_key': 'telescopica_h45_350', 'insert_real_hardware': False,
     'drawer': dict(DRAWER),
+    'slide': dict(SLIDE),
     'tol': dict(DEFAULT_TOL),
     # Edge banding (fita). Auto-bands the visible front edge of carcass parts and
     # all four edges of doors/faces; see FITA / fita_tape. Deep-merged in
@@ -555,9 +583,24 @@ def res(name):
 # re-sizes the drawer boxes automatically — the hardware analogue of how the
 # HINGE defaults fill in the boring dimensions.
 #
-# NOTE: the seeded clearances (side/bottom/back, min depth) are best-guess values
-# for the Häfele Matrix Invisa A30; confirm against the datasheet. They are pure
-# data — editing hardware.json is enough, no code change.
+# Two MOUNTING families are modelled, because they eat the cabinet's clear width
+# very differently:
+#   'side'       — corrediça montada na LATERAL da gaveta (roldana / telescópica).
+#                  The runner sits BETWEEN the carcass side and the box side, so it
+#                  costs real width: side_space per side (~12,5mm roldana, ~12,7mm
+#                  telescópica 45mm) and the box is only that much narrower.
+#   'undermount' — corrediça OCULTA, under the box. Costs little width (~6,5mm per
+#                  side) but needs bottom_clearance under the box.
+# Both are expressed through one number the builder reads — side_space, the space
+# per side between the carcass and the OUTER box side (see slide_side_space).
+# carcass_deduction is the alternative convention used by undermount datasheets
+# (Blum/Häfele: drawer bottom BETWEEN the sides = clear width - deduction); it is
+# only read when side_space is absent.
+#
+# NOTE: the seeded clearances are the usual BR market figures (and best-guess
+# values for the Häfele Matrix Invisa A30); confirm against the datasheet. They are
+# pure data — editing hardware.json is enough, no code change — and every number
+# is also overridable per cabinet via cfg['slide'] (see SLIDE).
 # -----------------------------------------------------------------------------
 HARDWARE_DIR = os.path.join(RES_DIR, 'hardware')
 
@@ -567,12 +610,15 @@ FALLBACK_SLIDE = {
     'key': 'hafele_matrix_invisa_a30_300',
     'description': 'Corredica oculta Hafele Matrix Invisa A30 GT2 300mm (ext. total, push)',
     'type': 'undermount',
+    'mount': 'undermount',        # 'undermount' (oculta) | 'side' (lateral)
     'nominal_length_mm': 300.0,   # NL
     # Undermount planning rule (Hafele): the drawer bottom BETWEEN the sides =
     # clear carcass width - carcass_deduction; the outer box width follows from
     # the side thickness. So the drawer is sized off this deduction, not a raw
     # side gap. (Datasheet: max drawer width = clear width - 42 + 2*side_t.)
     'carcass_deduction': 42.0,
+    'side_space': None,           # space per side carcass <-> outer box side (mm);
+                                  # None = derive it from carcass_deduction
     'side_panel_thickness': 16.0, # thickness the runner is designed for (info)
     'side_clearance': 6.0,        # resulting per-side air gap with 15mm sides (info)
     'bottom_clearance': 13.0,     # gap under the box for the undermount mechanism
@@ -580,6 +626,7 @@ FALLBACK_SLIDE = {
     'min_cabinet_depth': 318.0,   # required internal depth for the 300mm NL
     'recommended_box_depth': 300.0,  # box side length ~ NL
     'base_depth_offset': 29.0,    # base panel depth = NL - 29 (info)
+    'profile_z_offset': 0.0,      # box floor -> bottom of the side-mounted profile
     'proxy_L': 300.0, 'proxy_W': 12.0, 'proxy_H': 45.0,   # slide envelope box (mm)
     'drilling': [],               # optional box-local pilots [{x,y,z,dia,depth}]
     'model_file': 'models/433_03_132_4.stp',              # rel to HARDWARE_DIR; '' = none
@@ -605,8 +652,9 @@ def load_hardware_manifest():
 
 def resolve_slide_spec(cfg):
     """Full slide spec for cfg['slide_key'], backfilling any missing field from
-    FALLBACK_SLIDE. Never raises — an unknown key falls back to the manifest
-    default, then to FALLBACK_SLIDE."""
+    FALLBACK_SLIDE and then applying cfg['slide'] when it is marked 'custom'.
+    Never raises — an unknown key falls back to the manifest default, then to
+    FALLBACK_SLIDE, and a garbage override value is skipped."""
     man = load_hardware_manifest()
     slides = man.get('slides', {}) if isinstance(man, dict) else {}
     key = cfg.get('slide_key') or man.get('default') or FALLBACK_SLIDE['key']
@@ -614,7 +662,70 @@ def resolve_slide_spec(cfg):
     if isinstance(slides.get(key), dict):
         spec.update(slides[key])
     spec['key'] = key
+    ov = cfg.get('slide')
+    if isinstance(ov, dict) and ov.get('custom'):
+        for src, dst in _SLIDE_OVERRIDE_FIELDS:
+            val = ov.get(src)
+            if val is None or val == '':
+                continue
+            try:
+                spec[dst] = float(val)
+            except (TypeError, ValueError):
+                pass
+        spec['custom'] = True
+        # An explicit per-side space always wins over the datasheet deduction.
+        if spec.get('side_space') is not None:
+            spec['carcass_deduction'] = None
     return spec
+
+
+def slide_mount(spec):
+    """'side' (lateral: roldana/telescópica) or 'undermount' (oculta)."""
+    return 'side' if spec.get('mount') == 'side' else 'undermount'
+
+
+def slide_side_space(spec, box_t_mm):
+    """Space (mm) the slide takes on EACH side, between the carcass and the outer
+    drawer-box side — the single number the box width is derived from.
+
+    Side-mounted runners publish it directly (side_space). Undermount datasheets
+    instead publish a carcass deduction on the bottom BETWEEN the sides, so the
+    equivalent per-side space depends on the box wall thickness:
+        bottom = clear - deduction  =>  outer = clear - deduction + 2*box_t
+    """
+    ss = spec.get('side_space')
+    if ss is not None and ss != '':
+        return float(ss)
+    ded = spec.get('carcass_deduction')
+    if ded is None:
+        ded = 2.0 * spec.get('side_clearance', 0.0)
+    return float(ded) / 2.0 - box_t_mm
+
+
+def slide_box_outer_width(clear_w_mm, spec, box_t_mm):
+    """Outer width (mm) of a drawer box in a clear opening, for this slide."""
+    return clear_w_mm - 2.0 * slide_side_space(spec, box_t_mm)
+
+
+def slide_proxy_slots(spec, box_x0_c, box_outer_w_c, box_y0_c, box_z0_c, box_h_c,
+                      side_space_c, depth_c):
+    """Where the two slide proxies/models sit for one drawer, as
+    [(side, (x0, y0, z0, dx, dy, dz))] in cm — the one place the mounting family
+    changes the model. Side-mounted runners fill the air gap beside each box side
+    (a plate of side_space thickness, proxy_H tall); undermount runners sit in the
+    runner gap directly under the box, hugging each side."""
+    L_c = min(spec.get('proxy_L', 300.0) / 10.0, depth_c)
+    if slide_mount(spec) == 'side':
+        h_c = min(spec.get('proxy_H', 45.0) / 10.0, box_h_c)
+        z0 = box_z0_c + min(spec.get('profile_z_offset', 0.0) / 10.0,
+                            max(0.0, box_h_c - h_c))
+        return [('E', (box_x0_c - side_space_c, box_y0_c, z0, side_space_c, L_c, h_c)),
+                ('D', (box_x0_c + box_outer_w_c, box_y0_c, z0, side_space_c, L_c, h_c))]
+    w_c = spec.get('proxy_W', 12.0) / 10.0
+    bc_c = spec.get('bottom_clearance', 13.0) / 10.0
+    z0 = box_z0_c - bc_c
+    return [('E', (box_x0_c, box_y0_c, z0, w_c, L_c, bc_c)),
+            ('D', (box_x0_c + box_outer_w_c - w_c, box_y0_c, z0, w_c, L_c, bc_c))]
 
 
 def slide_keys():
@@ -623,6 +734,25 @@ def slide_keys():
     slides = man.get('slides', {}) if isinstance(man, dict) else {}
     items = [(k, v.get('description', k)) for k, v in slides.items()]
     return items or [(FALLBACK_SLIDE['key'], FALLBACK_SLIDE['description'])]
+
+
+def slide_specs_for_ui():
+    """The library as [{key, desc, mount, side_space, bottom_clearance,
+    back_clearance, box_depth, min_cabinet_depth}], so the palettes can refill the
+    'personalizar' fields when the user picks another slide."""
+    out = []
+    for k, desc in slide_keys():
+        spec = resolve_slide_spec({'slide_key': k})
+        out.append({
+            'key': k, 'desc': desc, 'mount': slide_mount(spec),
+            # Reported for a 16mm box wall, the reference the UI seeds from.
+            'side_space': round(slide_side_space(spec, DRAWER['box_t']), 2),
+            'bottom_clearance': spec.get('bottom_clearance', 0.0),
+            'back_clearance': spec.get('back_clearance', 0.0),
+            'box_depth': spec.get('recommended_box_depth', 0.0),
+            'min_cabinet_depth': spec.get('min_cabinet_depth', 0.0),
+        })
+    return out
 
 
 # -----------------------------------------------------------------------------
@@ -635,16 +765,32 @@ def slide_keys():
 # and cached, degrading to an empty dict on any error exactly like
 # load_hardware_manifest(), so a missing/corrupt file never breaks the add-in.
 #
-# Shape:
-#   {"version": 1,
-#    "materials": [{"name": "MDF 18mm Branco", "thickness": 18.0}, ...],
-#    "cabinet_defaults": { partial cfg overriding DEFAULT_CFG: W,H,D,t, fita{},
-#                          hinge{}, drawer{}, slide_key, toe_kick*, ... }}
+# Shape (v2 — several named PROFILES, one active):
+#   {"version": 2,
+#    "active_profile": "Padrão",
+#    "profiles": [
+#      {"name": "Padrão",
+#       "materials": [{"name": "MDF 18mm Branco", "thickness": 18.0}, ...],
+#       "cabinet_defaults": { partial cfg overriding DEFAULT_CFG: W,H,D,t, fita{},
+#                             hinge{}, drawer{}, slide{}, slide_key, toe_kick*, ... }},
+#      ...]}
+#
+# A profile is one complete "variation" of the configuration (a shop standard, a
+# client, a job): switching the active profile swaps the material library AND the
+# cabinet defaults together. The same document shape is what the Preferences
+# palette exports/imports (plus a 'kind' marker), so a profile travels between
+# machines as a plain .json file.
+#
+# v1 files ({version:1, materials, cabinet_defaults} — no profiles) are migrated
+# on load into a single profile, so nothing is lost on upgrade; the migrated shape
+# is only written back on the next save.
 #
 # The two accessors get_materials() / effective_default_cfg() are the single
 # seams the rest of the add-in reads through, so saved prefs override the
 # hardcoded MATERIALS / DEFAULT_CFG without changing any call site's shape.
-PREFS_VERSION = 1
+PREFS_VERSION = 2
+PREFS_FILE_KIND = 'fusionmob-preferences'    # marker in exported files
+DEFAULT_PROFILE_NAME = 'Padrão'
 _PREFS_CACHE = None
 
 
@@ -658,33 +804,98 @@ def prefs_path():
     return os.path.join(base, 'preferences.json')
 
 
+def _clean_stored_materials(raw):
+    """Coerce a stored materials list into [{'name','thickness'}] (dropping junk)."""
+    out = []
+    if isinstance(raw, list):
+        for m in raw:
+            if isinstance(m, dict) and m.get('name'):
+                try:
+                    thk = float(m.get('thickness') or 0.0)
+                except (TypeError, ValueError):
+                    thk = 0.0
+                out.append({'name': str(m['name']), 'thickness': thk})
+    return out
+
+
+def _clean_profile(raw, fallback_name):
+    """Coerce a raw profile dict into {'name','materials','cabinet_defaults'}."""
+    raw = raw if isinstance(raw, dict) else {}
+    name = str(raw.get('name') or '').strip() or fallback_name
+    defaults = raw.get('cabinet_defaults')
+    return {'name': name,
+            'materials': _clean_stored_materials(raw.get('materials')),
+            'cabinet_defaults': dict(defaults) if isinstance(defaults, dict) else {}}
+
+
+def _empty_store():
+    return {'version': PREFS_VERSION, 'active_profile': DEFAULT_PROFILE_NAME, 'profiles': []}
+
+
+def migrate_prefs(data, default_name=DEFAULT_PROFILE_NAME):
+    """Normalize any preferences document (v1 flat, v2 profiles, or garbage) into
+    the current store shape. Pure — also used to read imported files."""
+    if not isinstance(data, dict):
+        return _empty_store()
+    raw_profiles = data.get('profiles')
+    profiles, seen = [], set()
+    if isinstance(raw_profiles, list):
+        for i, p in enumerate(raw_profiles):
+            prof = _clean_profile(p, '{} {}'.format(default_name, i + 1))
+            key = prof['name'].lower()
+            if key in seen:                       # de-duplicate names within a file
+                prof['name'] = _unique_name(prof['name'], seen)
+                key = prof['name'].lower()
+            seen.add(key)
+            profiles.append(prof)
+    elif data.get('materials') is not None or data.get('cabinet_defaults') is not None:
+        # v1: one implicit profile stored flat at the top level.
+        profiles.append(_clean_profile(data, default_name))
+    active = str(data.get('active_profile') or '').strip()
+    if not any(p['name'] == active for p in profiles):
+        active = profiles[0]['name'] if profiles else default_name
+    return {'version': PREFS_VERSION, 'active_profile': active, 'profiles': profiles}
+
+
+def _unique_name(base, taken_lower):
+    """`base`, else 'base (2)', 'base (3)'… — first not in `taken_lower` (a set of
+    lowercased names)."""
+    if base.lower() not in taken_lower:
+        return base
+    n = 2
+    while '{} ({})'.format(base, n).lower() in taken_lower:
+        n += 1
+    return '{} ({})'.format(base, n)
+
+
 def load_preferences():
-    """The parsed preferences.json (cached). Degrades to {} if the file is
-    missing/invalid, so the accessors always fall back to the hardcoded defaults."""
+    """The migrated preferences store (cached). Degrades to an empty store if the
+    file is missing/invalid, so the accessors fall back to the hardcoded defaults."""
     global _PREFS_CACHE
     if _PREFS_CACHE is None:
         try:
             with open(prefs_path(), 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            _PREFS_CACHE = data if isinstance(data, dict) else {}
+            _PREFS_CACHE = migrate_prefs(data)
         except Exception:
-            _PREFS_CACHE = {}
+            _PREFS_CACHE = _empty_store()
     return _PREFS_CACHE
 
 
-def save_preferences(prefs):
+def save_preferences(store):
     """Write preferences.json (creating its folder) and invalidate the cache so
     the next dialog/palette sees the change. Raises on I/O error (caller reports)."""
     global _PREFS_CACHE
     path = prefs_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
-        json.dump(prefs, f, ensure_ascii=False, indent=2)
+        json.dump(store, f, ensure_ascii=False, indent=2)
     _PREFS_CACHE = None
 
 
 def clear_preferences():
-    """Remove the preferences file (reset to factory) and invalidate the cache."""
+    """Remove the preferences file (reset every profile to factory) and invalidate
+    the cache."""
     global _PREFS_CACHE
     try:
         os.remove(prefs_path())
@@ -693,33 +904,37 @@ def clear_preferences():
     _PREFS_CACHE = None
 
 
+def profile_names():
+    """Names of the saved profiles, in stored order (may be empty)."""
+    return [p['name'] for p in load_preferences()['profiles']]
+
+
+def active_profile():
+    """The active profile dict. Always returns the {'name','materials',
+    'cabinet_defaults'} shape — an empty one when nothing is saved yet, so the
+    accessors below fall back to the factory values."""
+    store = load_preferences()
+    for p in store['profiles']:
+        if p['name'] == store['active_profile']:
+            return p
+    return {'name': store['active_profile'], 'materials': [], 'cabinet_defaults': {}}
+
+
 def get_materials():
-    """The active material library as [(name, thickness_mm), ...]: the user's
-    saved list when present and non-empty, else the built-in MATERIALS seed.
+    """The active material library as [(name, thickness_mm), ...]: the active
+    profile's list when present and non-empty, else the built-in MATERIALS seed.
     Thickness is informational (CorteCloud reads it from the name); part geometry
     uses the per-part cfg thickness, not this value."""
-    saved = load_preferences().get('materials')
-    if isinstance(saved, list):
-        out = []
-        for m in saved:
-            if isinstance(m, dict) and m.get('name'):
-                try:
-                    thk = float(m.get('thickness') or 0.0)
-                except (TypeError, ValueError):
-                    thk = 0.0
-                out.append((str(m['name']), thk))
-        if out:
-            return out
-    return list(MATERIALS)
+    saved = [(m['name'], m['thickness']) for m in active_profile()['materials'] if m.get('name')]
+    return saved or list(MATERIALS)
 
 
 def effective_default_cfg():
-    """Factory DEFAULT_CFG with the user's saved cabinet defaults merged on top.
+    """Factory DEFAULT_CFG with the active profile's cabinet defaults merged on top.
     normalize_cfg already deep-merges a partial cfg over DEFAULT_CFG (top level +
-    tol/hinge/drawer/fita), so a saved partial produces the right effective cfg;
-    an absent/empty prefs block yields the plain normalized factory defaults."""
-    saved = load_preferences().get('cabinet_defaults')
-    return normalize_cfg(saved if isinstance(saved, dict) else {})
+    tol/hinge/drawer/slide/fita), so a saved partial produces the right effective cfg;
+    an absent/empty profile yields the plain normalized factory defaults."""
+    return normalize_cfg(active_profile()['cabinet_defaults'])
 
 
 def _slide_key_from_label(label):
@@ -1373,17 +1588,48 @@ def _rigid_group_occs(parent_comp, occ_list):
         return False
 
 
-def _set_drawer_travel_limits(joint, travel_c):
-    """Limit the slide to [0, travel_c] (cm): closed at rest (0), pulling out
-    toward the FRONT up to ~full extension. The box-side edge used as the slide
-    axis is oriented so a positive value moves the drawer forward (−Y), so the
-    allowed range is the positive side. Optional; never fatal."""
+def _slide_forward_sign(joint, edge):
+    """Which sign of the joint value moves the drawer toward the cabinet FRONT
+    (−Y): +1 if the slide axis already points at −Y, −1 if it points at +Y.
+
+    The axis comes from CustomJointDirection over a body edge, and an edge's
+    direction is whatever the BRep hands back — the box sides are cut by a
+    boolean difference (the bottom groove), which can flip the surviving edge —
+    so it must be MEASURED, never assumed. The joint's own slideDirectionVector
+    is authoritative (it is the direction positive values move occurrenceOne);
+    the edge's start->end vector is the fallback. Cabinet occurrences carry a
+    translation only (never a rotation), so the Y sign is the same in the
+    assembly context and in cabinet-local coordinates. Defaults to +1."""
     try:
+        v = joint.jointMotion.slideDirectionVector
+        if abs(v.y) > 1e-9:
+            return -1.0 if v.y > 0.0 else 1.0
+    except Exception:
+        pass
+    try:
+        dy = edge.endVertex.geometry.y - edge.startVertex.geometry.y
+        if abs(dy) > 1e-9:
+            return -1.0 if dy > 0.0 else 1.0
+    except Exception:
+        pass
+    return 1.0
+
+
+def _set_drawer_travel_limits(joint, travel_c, edge):
+    """Limit the slide to ~full extension toward the FRONT, closed at rest (0).
+    The allowed range sits on whichever side of 0 actually opens the drawer
+    (see _slide_forward_sign): [0, +travel] when the axis points −Y, or
+    [−travel, 0] when it points +Y. Pinning it to the positive side regardless
+    is what used to make some drawers slide INTO the carcass instead of out.
+    Optional; never fatal."""
+    try:
+        travel = abs(travel_c) * _slide_forward_sign(joint, edge)
+        lo, hi = (0.0, travel) if travel >= 0.0 else (travel, 0.0)
         limits = joint.jointMotion.slideLimits
         limits.isMinimumValueEnabled = True
-        limits.minimumValue = 0.0
+        limits.minimumValue = lo
         limits.isMaximumValueEnabled = True
-        limits.maximumValue = abs(travel_c)
+        limits.maximumValue = hi
     except:
         pass
 
@@ -1422,7 +1668,7 @@ def attach_drawer_slides(cabinet_comp, anchor_occ, drawer_units):
             ji.setAsSliderJointMotion(
                 adsk.fusion.JointDirections.CustomJointDirection, edge)
             joint = as_built.add(ji)
-            _set_drawer_travel_limits(joint, unit['travel_c'])
+            _set_drawer_travel_limits(joint, unit['travel_c'], edge)
             made += 1
         except Exception:
             pass
@@ -1570,8 +1816,11 @@ def _pname(ctx, prefix, base, idx, single_ok=False):
 
 
 def _resolve_leaf_slide(node, ctx):
-    """Slide spec for a drawers leaf, honouring a per-leaf slide_key override."""
-    return resolve_slide_spec({'slide_key': node.get('slide_key') or ctx.slide_key})
+    """Slide spec for a drawers leaf, honouring a per-leaf slide_key override. The
+    cabinet's cfg['slide'] tweaks ride along so a customized spec applies to every
+    region, whichever slide the leaf picked."""
+    return resolve_slide_spec({'slide_key': node.get('slide_key') or ctx.slide_key,
+                               'slide': ctx.slide})
 
 
 def build_shelves(band, node, ctx, prefix, min_front_setback=0.0):
@@ -1740,11 +1989,12 @@ def build_drawers(band, node, ctx, prefix):
     face_h_mm = (region_h_mm - (n + 1) * gap_mm) / n
     face_h_c = face_h_mm / 10.0
 
+    # The runner eats clear width: a side-mounted one sits beside each box side,
+    # an undermount one only needs a small air gap (see slide_side_space).
     region_inner_w_mm = (band.x1 - band.x0) * 10.0
-    deduction_mm = spec.get('carcass_deduction')
-    if deduction_mm is None:
-        deduction_mm = 2.0 * spec.get('side_clearance', 0.0)
-    box_outer_w_mm = region_inner_w_mm - deduction_mm + 2 * box_t
+    side_space_mm = slide_side_space(spec, box_t)
+    side_space_c = side_space_mm / 10.0
+    box_outer_w_mm = region_inner_w_mm - 2 * side_space_mm
     box_outer_w_c = box_outer_w_mm / 10.0
     box_x0_c = band.x0 + (region_inner_w_mm / 10.0 - box_outer_w_c) / 2.0
     inner_bw_mm = box_outer_w_mm - 2 * box_t
@@ -1771,8 +2021,6 @@ def build_drawers(band, node, ctx, prefix):
     bot_d_mm = (box_depth_mm - 2 * box_t) + 2 * drawer['bottom_dado_depth']
 
     box_mat = drawer['box_material']
-    pW_c = spec['proxy_W'] / 10.0
-    slide_len_c = min(spec['proxy_L'] / 10.0, box_depth_c)
 
     for i in range(n):
         ctx.drawer_i += 1
@@ -1780,7 +2028,6 @@ def build_drawers(band, node, ctx, prefix):
         fz0 = z_region0 + dg_c + i * (face_h_c + dg_c)
         ftop = fz0 + face_h_c
         bz0 = max(fz0, base_top_c) + bc_c
-        runner_z0 = bz0 - bc_c
         box_top_c = min(ftop, top_bot_c) - top_gap_c
         box_h_c = box_top_c - bz0
         if box_h_c > box_max_h_c:
@@ -1824,12 +2071,15 @@ def build_drawers(band, node, ctx, prefix):
         add_solid_body(dcomp, label + ' Frente',
             (face_x0_c, face_y0_c, fz0, face_w_c, face_t_c, face_h_c), face_data)
 
-        for side, sx0 in (('E', box_x0_c), ('D', box_x0_c + box_outer_w_c - pW_c)):
+        for side, box in slide_proxy_slots(spec, box_x0_c, box_outer_w_c, box_y0_c,
+                                           bz0, box_h_c, side_space_c, box_depth_c):
             nm = '{0} Corredica {1}'.format(label, side)
             if ctx.hw_comp is not None:
-                ctx.hw_slots.append((nm, (sx0, box_y0_c, runner_z0)))
-            else:
-                add_solid_body(dcomp, nm, (sx0, box_y0_c, runner_z0, pW_c, slide_len_c, bc_c))
+                ctx.hw_slots.append((nm, (box[0], box[1], box[2])))
+            elif min(box[3], box[4], box[5]) > 1e-6:
+                # A zero clearance (a runner with no gap of its own) leaves no room
+                # for a proxy box — the drawer is still built, just unmarked.
+                add_solid_body(dcomp, nm, box)
 
         ctx.drawer_bundles.append({'occ': drawer_occ, 'edge_x_c': box_x0_c,
                                    'edge_z_c': bz0, 'travel_c': box_depth_c * 0.9})
@@ -2344,6 +2594,7 @@ def build_cabinet(design, cfg, translation=None):
     ctx.drawer_gap = cfg['drawer_gap']
     ctx.drawer = cfg['drawer']
     ctx.slide_key = cfg['slide_key']
+    ctx.slide = cfg['slide']            # per-cabinet override of the slide spec
     ctx.t = t
     ctx.tc = tc
     ctx.D = D
@@ -2681,7 +2932,7 @@ def _normalize_layout_node(node):
 def normalize_cfg(cfg):
     """Fill any missing keys from the defaults (robust to older stored configs)."""
     out = dict(DEFAULT_CFG)
-    out.update({k: cfg[k] for k in cfg if k not in ('tol', 'hinge', 'drawer', 'fita', 'joinery', 'tamponamento', 'arremate', 'layout')})
+    out.update({k: cfg[k] for k in cfg if k not in ('tol', 'hinge', 'drawer', 'slide', 'fita', 'joinery', 'tamponamento', 'arremate', 'layout')})
     tol = dict(DEFAULT_TOL)
     if isinstance(cfg.get('tol'), dict):
         tol.update(cfg['tol'])
@@ -2694,6 +2945,10 @@ def normalize_cfg(cfg):
     if isinstance(cfg.get('drawer'), dict):
         drawer.update(cfg['drawer'])
     out['drawer'] = drawer
+    slide = dict(SLIDE)
+    if isinstance(cfg.get('slide'), dict):
+        slide.update(cfg['slide'])
+    out['slide'] = slide
     fita = dict(FITA)
     if isinstance(cfg.get('fita'), dict):
         fita.update(cfg['fita'])
@@ -2760,6 +3015,63 @@ def _apply_arremate_top_mode_visibility(inputs):
         gap_in.isVisible = not by_ceiling
     if ceil_in:
         ceil_in.isVisible = by_ceiling
+
+
+_SLIDE_UI_FIELDS = ('side_space', 'bottom_clearance', 'back_clearance',
+                    'box_depth', 'min_cabinet_depth')
+
+# Dialog input ids for the five editable slide numbers, in _SLIDE_UI_FIELDS order.
+_SLIDE_INPUT_IDS = ('slideSideSpace', 'slideBottomClearance', 'slideBackClearance',
+                    'slideBoxDepth', 'slideMinDepth')
+
+
+def slide_ui_values(cfg):
+    """The five editable slide numbers (mm) to show for this cfg: the stored
+    overrides when 'personalizar' is on, otherwise a live readout of the chosen
+    library slide's own values."""
+    sl = cfg.get('slide') if isinstance(cfg.get('slide'), dict) else SLIDE
+    if sl.get('custom'):
+        out = {}
+        for k in _SLIDE_UI_FIELDS:
+            try:
+                out[k] = float(sl.get(k, SLIDE[k]))
+            except (TypeError, ValueError):
+                out[k] = float(SLIDE[k])
+        return out
+    spec = resolve_slide_spec({'slide_key': cfg.get('slide_key')})
+    drawer = cfg.get('drawer') if isinstance(cfg.get('drawer'), dict) else DRAWER
+    return {
+        'side_space': slide_side_space(spec, drawer.get('box_t', DRAWER['box_t'])),
+        'bottom_clearance': spec.get('bottom_clearance', 0.0),
+        'back_clearance': spec.get('back_clearance', 0.0),
+        'box_depth': spec.get('recommended_box_depth', 0.0),
+        'min_cabinet_depth': spec.get('min_cabinet_depth', 0.0),
+    }
+
+
+def _apply_slide_custom_state(inputs, refresh_from_spec=False):
+    """Keep the five slide-measurement inputs in step with the 'personalizar'
+    checkbox: read-only (a live readout of the selected slide) while it is off,
+    editable and authoritative while it is on. `refresh_from_spec` re-reads the
+    numbers from the chosen slide — done when the slide changes, but never while
+    'personalizar' is on, so the user's own figures are not overwritten."""
+    custom_in = inputs.itemById('slideCustom')
+    if not custom_in:
+        return
+    custom = bool(custom_in.value)
+    if refresh_from_spec and not custom:
+        key_in = inputs.itemById('slideKey')
+        key = (_slide_key_from_label(key_in.selectedItem.name)
+               if key_in and key_in.selectedItem else None)
+        vals = slide_ui_values({'slide_key': key, 'slide': dict(SLIDE, custom=False)})
+        for cid, field in zip(_SLIDE_INPUT_IDS, _SLIDE_UI_FIELDS):
+            item = inputs.itemById(cid)
+            if item:
+                item.value = vals[field] / 10.0
+    for cid in _SLIDE_INPUT_IDS:
+        item = inputs.itemById(cid)
+        if item:
+            item.isEnabled = custom
 
 
 def add_cabinet_inputs(inputs, cfg):
@@ -2868,6 +3180,28 @@ def add_cabinet_inputs(inputs, cfg):
         face_mat.listItems.item(0).isSelected = True
     dw.addBoolValueInput('insertRealHardware', 'Inserir modelo 3D da corredica',
                          True, '', bool(cfg['insert_real_hardware']))
+    # Slide mounting measurements. Read-only readout of the chosen corredica until
+    # 'Personalizar' is ticked, then they override the library spec for this
+    # cabinet (see SLIDE / resolve_slide_spec).
+    sl_cfg = cfg['slide']
+    sl_vals = slide_ui_values(cfg)
+    sl_custom = dw.addBoolValueInput('slideCustom', 'Personalizar medidas da corredica',
+                                     True, '', bool(sl_cfg['custom']))
+    sl_custom.tooltip = ('Ligue para editar os espacos/folgas da corredica neste armario '
+                         '(sobrepoe a biblioteca de ferragens).')
+    sl_ss = dw.addValueInput('slideSideSpace', 'Espaco lateral (por lado)', 'mm',
+                             adsk.core.ValueInput.createByReal(sl_vals['side_space'] / 10.0))
+    sl_ss.tooltip = ('Espaco que a corredica ocupa de cada lado, entre a lateral do movel '
+                     'e a lateral da caixa. Lateral (roldana/telescopica) ~12,5-12,7mm; '
+                     'oculta ~6,5mm. A largura da caixa = vao livre - 2x este valor.')
+    dw.addValueInput('slideBottomClearance', 'Folga sob a caixa', 'mm',
+                     adsk.core.ValueInput.createByReal(sl_vals['bottom_clearance'] / 10.0))
+    dw.addValueInput('slideBackClearance', 'Folga no fundo (caixa-fundo)', 'mm',
+                     adsk.core.ValueInput.createByReal(sl_vals['back_clearance'] / 10.0))
+    dw.addValueInput('slideBoxDepth', 'Profundidade da caixa', 'mm',
+                     adsk.core.ValueInput.createByReal(sl_vals['box_depth'] / 10.0))
+    dw.addValueInput('slideMinDepth', 'Profundidade minima do armario', 'mm',
+                     adsk.core.ValueInput.createByReal(sl_vals['min_cabinet_depth'] / 10.0))
 
     # Side<->base/top joinery (Fixacao Lateral). Per junction: base/top captured
     # between full-height sides ('Alinhada com base', today) or full-width with
@@ -3007,6 +3341,8 @@ def add_cabinet_inputs(inputs, cfg):
     _apply_cabinet_advanced_visibility(inputs, adv_mode.value)
     # Show only the arremate gap field matching the chosen measurement mode.
     _apply_arremate_top_mode_visibility(inputs)
+    # Lock the slide measurements unless 'Personalizar' is on.
+    _apply_slide_custom_state(inputs)
 
 
 def read_cabinet_inputs(inputs):
@@ -3062,6 +3398,16 @@ def read_cabinet_inputs(inputs):
             'box_material': inputs.itemById('drawerBoxMaterial').selectedItem.name,
             'face_material': inputs.itemById('drawerFaceMaterial').selectedItem.name,
         }),
+        # Slide measurements. Always stored; only honoured while 'custom' is on
+        # (otherwise the library spec for slide_key wins — see resolve_slide_spec).
+        'slide': {
+            'custom': inputs.itemById('slideCustom').value,
+            'side_space': inputs.itemById('slideSideSpace').value * 10.0,
+            'bottom_clearance': inputs.itemById('slideBottomClearance').value * 10.0,
+            'back_clearance': inputs.itemById('slideBackClearance').value * 10.0,
+            'box_depth': inputs.itemById('slideBoxDepth').value * 10.0,
+            'min_cabinet_depth': inputs.itemById('slideMinDepth').value * 10.0,
+        },
         'tol': {
             'dado_bottom_clearance': inputs.itemById('tolDadoBottom').value * 10.0,
             'dado_side_clearance': inputs.itemById('tolDadoSide').value * 10.0,
@@ -3146,6 +3492,11 @@ def write_cabinet_inputs(inputs, cfg):
     _select_dropdown(inputs.itemById('drawerBoxMaterial'), dr_cfg['box_material'])
     _select_dropdown(inputs.itemById('drawerFaceMaterial'), dr_cfg['face_material'])
     inputs.itemById('insertRealHardware').value = bool(cfg['insert_real_hardware'])
+    inputs.itemById('slideCustom').value = bool(cfg['slide']['custom'])
+    sl_vals = slide_ui_values(cfg)
+    for cid, field in zip(_SLIDE_INPUT_IDS, _SLIDE_UI_FIELDS):
+        inputs.itemById(cid).value = sl_vals[field] / 10.0
+    _apply_slide_custom_state(inputs)
     tol = cfg['tol']
     inputs.itemById('tolDadoBottom').value = tol['dado_bottom_clearance'] / 10.0
     inputs.itemById('tolDadoSide').value = tol['dado_side_clearance'] / 10.0
@@ -3351,7 +3702,8 @@ def _validate_leaf(band, node, cfg):
         n = node['count']
         gap = cfg['drawer_gap'] if node.get('gap') is None else node['gap']
         drawer = cfg['drawer']
-        spec = resolve_slide_spec({'slide_key': node.get('slide_key') or cfg['slide_key']})
+        spec = resolve_slide_spec({'slide_key': node.get('slide_key') or cfg['slide_key'],
+                                   'slide': cfg.get('slide')})
         inset = node.get('inset', False)
         if inset:
             region_w, region_h = band_w_mm, band_h_mm
@@ -3378,15 +3730,18 @@ def _validate_leaf(band, node, cfg):
         if (back_front_y - spec['back_clearance']) < 100.0:
             return ('Not enough depth for the drawer box (increase the profundidade '
                     'or reduce the back setback).')
-        deduction = spec.get('carcass_deduction')
-        if deduction is None:
-            deduction = 2.0 * spec.get('side_clearance', 0.0)
-        if region_inner_w - deduction <= 0:
-            return ('This region is too narrow for the slide: the drawer bottom needs '
-                    'at least {0:.0f}mm of clear width.'.format(deduction))
-        if deduction - 2 * drawer['box_t'] <= 0:
-            return ('Drawer sides are too thick for this slide (need side thickness '
-                    '< {0:.0f}mm so the box clears the runners).'.format(deduction / 2.0))
+        # Width: the runner takes side_space per side (12.5-12.7mm for a lateral
+        # roldana/telescopica, ~6.5mm for an oculta), so the box is that much
+        # narrower than the clear opening.
+        side_space = slide_side_space(spec, drawer['box_t'])
+        if side_space < 0:
+            return ('Corredica invalida: o espaco lateral ficou negativo. Ajuste o '
+                    'espaco lateral da corredica ou a espessura da caixa.')
+        box_outer_w = region_inner_w - 2 * side_space
+        if box_outer_w <= 2 * drawer['box_t']:
+            return ('This region is too narrow for the slide: with {0:.1f}mm per side '
+                    'for the corredica the drawer box has no width left. Widen the '
+                    'region, choose a slimmer slide or thinner box sides.'.format(side_space))
         return None
 
     if typ == 'blind':
@@ -3444,6 +3799,9 @@ class NewCabinetInputChangedHandler(adsk.core.InputChangedEventHandler):
                 _apply_cabinet_advanced_visibility(args.inputs, args.input.value)
             elif args.input.id == 'arrTopMode':
                 _apply_arremate_top_mode_visibility(args.inputs)
+            elif args.input.id in ('slideKey', 'slideCustom'):
+                _apply_slide_custom_state(args.inputs,
+                                          refresh_from_spec=(args.input.id == 'slideKey'))
         except:
             if ui:
                 ui.messageBox('New Cabinet input failed:\n{}'.format(traceback.format_exc()))
@@ -3540,6 +3898,9 @@ class EditCabinetInputChangedHandler(adsk.core.InputChangedEventHandler):
                 return
             if cid == 'arrTopMode':
                 _apply_arremate_top_mode_visibility(args.inputs)
+                return
+            if cid in ('slideKey', 'slideCustom'):
+                _apply_slide_custom_state(args.inputs, refresh_from_spec=(cid == 'slideKey'))
                 return
             if cid != 'cabinetPick':
                 return
@@ -4030,7 +4391,7 @@ def _palette_state(design):
         'cfg': effective_default_cfg(),
         'cabinets': _cabinet_list(design) if design else [],
         'materials': [name for name, _thk in get_materials()],
-        'slides': [{'key': k, 'desc': d} for k, d in slide_keys()],
+        'slides': slide_specs_for_ui(),
     }
 
 
@@ -4154,14 +4515,20 @@ class CabinetLayoutCreatedHandler(adsk.core.CommandCreatedEventHandler):
 # -----------------------------------------------------------------------------
 def _prefs_state():
     """Payload for the preferences editor: the current (saved-or-factory) material
-    library and cabinet defaults, the option lists, plus the pristine factory
-    values so the editor's Reset can restore them without another round-trip."""
+    library and cabinet defaults of the ACTIVE profile, the profile list, the option
+    lists, plus the pristine factory values so the editor's Reset can restore them
+    without another round-trip."""
     def mats(pairs):
         return [{'name': n, 'thickness': t} for n, t in pairs]
+    store = load_preferences()
     return {
+        # With nothing saved yet the active profile exists only conceptually
+        # (factory-valued); still list it so the picker is never empty.
+        'profiles': profile_names() or [store['active_profile']],
+        'active': store['active_profile'],
         'materials': mats(get_materials()),
         'cfg': effective_default_cfg(),
-        'slides': [{'key': k, 'desc': d} for k, d in slide_keys()],
+        'slides': slide_specs_for_ui(),
         'fita_choices': [{'value': v, 'label': lbl} for v, lbl in FITA_CHOICES],
         'factory': {
             'materials': mats(MATERIALS),
@@ -4195,36 +4562,239 @@ def _clean_materials(raw):
     return out, None
 
 
-def _prefs_save(data):
-    """Validate and persist the edited preferences. Returns {ok, error?}."""
+def _store_copy():
+    """A private copy of the cached store, safe to mutate: a failed/cancelled
+    operation must never leave the in-memory cache out of sync with the file."""
+    return json.loads(json.dumps(load_preferences()))
+
+
+def _factory_materials():
+    return [{'name': n, 'thickness': t} for n, t in MATERIALS]
+
+
+def _profile_in(store, name):
+    for p in store['profiles']:
+        if p['name'] == name:
+            return p
+    return None
+
+
+def _apply_edits_to_active(store, data):
+    """Validate the editor's materials + cabinet defaults and write them into
+    `store`'s active profile (creating that profile if it isn't stored yet).
+    Returns an error string, or None on success (store mutated in place)."""
     materials, err = _clean_materials(data.get('materials'))
     if err:
-        return {'ok': False, 'error': err}
+        return err
     defaults = data.get('cabinet_defaults')
     if not isinstance(defaults, dict):
         defaults = {}
     # Validate the defaults as a real cabinet config (normalize first, as apply does).
     err = validate_cfg(normalize_cfg(defaults))
     if err:
-        return {'ok': False, 'error': err}
+        return err
     # Store flat defaults only — never pin an interior layout, so New Cabinet keeps
     # synthesizing a fresh single region from the flat fields.
     stored = dict(defaults)
     stored.pop('layout', None)
-    prefs = {'version': PREFS_VERSION, 'materials': materials, 'cabinet_defaults': stored}
+    prof = _profile_in(store, store['active_profile'])
+    if prof is None:
+        prof = {'name': store['active_profile'], 'materials': [], 'cabinet_defaults': {}}
+        store['profiles'].append(prof)
+    prof['materials'] = materials
+    prof['cabinet_defaults'] = stored
+    return None
+
+
+def _prefs_result(note=None, **extra):
+    """A refreshed state payload for the editor, plus ok/note and any extras."""
+    state = _prefs_state()
+    state['ok'] = True
+    if note:
+        state['note'] = note
+    state.update(extra)
+    return state
+
+
+def _prefs_save(data):
+    """Validate and persist the edited preferences into the active profile."""
+    store = _store_copy()
+    err = _apply_edits_to_active(store, data)
+    if err:
+        return {'ok': False, 'error': err}
     try:
-        save_preferences(prefs)
+        save_preferences(store)
     except Exception as e:
         return {'ok': False, 'error': 'Não foi possível salvar as preferências: {}'.format(e)}
-    return {'ok': True, 'path': prefs_path()}
+    return _prefs_result(path=prefs_path())
 
 
 def _prefs_reset():
-    """Clear saved preferences (revert to factory) and return the fresh state."""
-    clear_preferences()
-    state = _prefs_state()
-    state['ok'] = True
-    return state
+    """Restore factory values in the ACTIVE profile (other profiles are untouched)
+    and return the fresh state."""
+    store = _store_copy()
+    prof = _profile_in(store, store['active_profile'])
+    if prof is None:
+        clear_preferences()
+        return _prefs_result()
+    prof['materials'] = _factory_materials()
+    prof['cabinet_defaults'] = {}
+    try:
+        save_preferences(store)
+    except Exception as e:
+        return {'ok': False, 'error': 'Não foi possível salvar as preferências: {}'.format(e)}
+    return _prefs_result()
+
+
+def _stage_edits(store, data):
+    """Best-effort: fold the editor's pending edits into `store`'s active profile
+    before a profile/export operation, so what the user sees is what is carried
+    over. Invalid edits are dropped (the store is left untouched) and reported as
+    a note rather than blocking the operation. Returns (store, note)."""
+    if data.get('materials') is None and data.get('cabinet_defaults') is None:
+        return store, None
+    staged = json.loads(json.dumps(store))
+    err = _apply_edits_to_active(staged, data)
+    if err:
+        return store, 'Alterações não salvas foram descartadas: {}'.format(err)
+    return staged, None
+
+
+def _prefs_profile_op(action, data):
+    """Profile management: select / create (blank or duplicate) / rename / delete.
+    Pending editor changes are saved into the current profile first, so switching
+    never silently loses work."""
+    store, note = _stage_edits(_store_copy(), data)
+    names = set(p['name'].lower() for p in store['profiles'])
+    name = str(data.get('name') or '').strip()
+
+    if action == 'profileSelect':
+        if name and not _profile_in(store, name):
+            return {'ok': False, 'error': 'Perfil não encontrado: "{}".'.format(name)}
+        store['active_profile'] = name or store['active_profile']
+
+    elif action == 'profileCreate':
+        if not name:
+            return {'ok': False, 'error': 'Informe um nome para o perfil.'}
+        if name.lower() in names:
+            return {'ok': False, 'error': 'Já existe um perfil chamado "{}".'.format(name)}
+        if data.get('copy_current'):
+            src = _profile_in(store, store['active_profile'])
+            src = src or {'materials': _factory_materials(), 'cabinet_defaults': {}}
+            prof = {'name': name,
+                    'materials': [dict(m) for m in src['materials']],
+                    'cabinet_defaults': dict(src['cabinet_defaults'])}
+        else:
+            prof = {'name': name, 'materials': _factory_materials(), 'cabinet_defaults': {}}
+        store['profiles'].append(prof)
+        store['active_profile'] = name
+
+    elif action == 'profileRename':
+        if not name:
+            return {'ok': False, 'error': 'Informe um nome para o perfil.'}
+        old = store['active_profile']
+        if name != old and name.lower() in names:
+            return {'ok': False, 'error': 'Já existe um perfil chamado "{}".'.format(name)}
+        prof = _profile_in(store, old)
+        if prof is None:   # nothing saved yet — the rename just names the first save
+            store['profiles'].append({'name': name, 'materials': _factory_materials(),
+                                      'cabinet_defaults': {}})
+        else:
+            prof['name'] = name
+        store['active_profile'] = name
+
+    elif action == 'profileDelete':
+        if len(store['profiles']) <= 1:
+            return {'ok': False, 'error': 'Mantenha ao menos um perfil. Use '
+                                          '"Restaurar padrões de fábrica" para zerá-lo.'}
+        target = name or store['active_profile']
+        store['profiles'] = [p for p in store['profiles'] if p['name'] != target]
+        store['active_profile'] = store['profiles'][0]['name']
+
+    else:
+        return {'ok': False, 'error': 'Unknown action.'}
+
+    try:
+        save_preferences(store)
+    except Exception as e:
+        return {'ok': False, 'error': 'Não foi possível salvar as preferências: {}'.format(e)}
+    return _prefs_result(note)
+
+
+def _prefs_filename(base):
+    """A safe .json filename for the export dialog."""
+    keep = [c if (c.isalnum() or c in ' -_') else '_' for c in base]
+    slug = ''.join(keep).strip().replace(' ', '_') or 'perfil'
+    return 'fusionmob_{}.json'.format(slug)
+
+
+def _prefs_export(data):
+    """Write the active profile (or every profile) to a .json file the user picks.
+    Exports what the editor currently shows, without saving it to the store."""
+    store, note = _stage_edits(_store_copy(), data)
+    if data.get('scope') == 'all':
+        profiles = store['profiles'] or [{'name': store['active_profile'],
+                                          'materials': _factory_materials(),
+                                          'cabinet_defaults': {}}]
+        suggested = 'perfis'
+    else:
+        prof = _profile_in(store, store['active_profile'])
+        profiles = [prof or {'name': store['active_profile'],
+                             'materials': _factory_materials(),
+                             'cabinet_defaults': {}}]
+        suggested = profiles[0]['name']
+    doc = {'kind': PREFS_FILE_KIND, 'version': PREFS_VERSION, 'app_version': __version__,
+           'active_profile': profiles[0]['name'], 'profiles': profiles}
+    dlg = ui.createFileDialog()
+    dlg.title = 'FusionMob - exportar configuração'
+    dlg.filter = 'FusionMob preferences (*.json)'
+    dlg.initialFilename = _prefs_filename(suggested)
+    if dlg.showSave() != adsk.core.DialogResults.DialogOK:
+        return {'ok': False, 'cancelled': True}
+    try:
+        with open(dlg.filename, 'w', encoding='utf-8') as f:
+            json.dump(doc, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return {'ok': False, 'error': 'Não foi possível exportar: {}'.format(e)}
+    return _prefs_result(note, path=dlg.filename, count=len(profiles))
+
+
+def _prefs_import(data):
+    """Read a .json exported by this add-in (or a legacy preferences.json) and add
+    its profiles to the store, renaming collisions instead of overwriting (import
+    never destroys a saved profile). The first imported profile becomes active."""
+    dlg = ui.createFileDialog()
+    dlg.title = 'FusionMob - importar configuração'
+    dlg.filter = 'FusionMob preferences (*.json)'
+    dlg.isMultiSelectEnabled = False
+    if dlg.showOpen() != adsk.core.DialogResults.DialogOK:
+        return {'ok': False, 'cancelled': True}
+    path = dlg.filename
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            doc = json.load(f)
+    except Exception as e:
+        return {'ok': False, 'error': 'Não foi possível ler o arquivo: {}'.format(e)}
+    stem = os.path.splitext(os.path.basename(path))[0]
+    incoming = migrate_prefs(doc, default_name=stem or DEFAULT_PROFILE_NAME)
+    if not incoming['profiles']:
+        return {'ok': False, 'error': 'O arquivo não contém nenhum perfil de configuração.'}
+
+    store, note = _stage_edits(_store_copy(), data)
+    added = []
+    for p in incoming['profiles']:
+        taken = set(q['name'].lower() for q in store['profiles'])
+        p = dict(p)
+        p['name'] = _unique_name(p['name'], taken)
+        store['profiles'].append(p)
+        added.append(p['name'])
+    store['active_profile'] = added[0]
+    try:
+        save_preferences(store)
+    except Exception as e:
+        return {'ok': False, 'error': 'Não foi possível salvar as preferências: {}'.format(e)}
+    msg = 'Importado(s) {} perfil(is): {}.'.format(len(added), ', '.join(added))
+    return _prefs_result('{} {}'.format(note, msg) if note else msg, path=path, count=len(added))
 
 
 class PrefsPaletteHTMLHandler(adsk.core.HTMLEventHandler):
@@ -4238,6 +4808,12 @@ class PrefsPaletteHTMLHandler(adsk.core.HTMLEventHandler):
                 args.returnData = json.dumps(_prefs_save(data))
             elif action == 'reset':
                 args.returnData = json.dumps(_prefs_reset())
+            elif action in ('profileSelect', 'profileCreate', 'profileRename', 'profileDelete'):
+                args.returnData = json.dumps(_prefs_profile_op(action, data))
+            elif action == 'export':
+                args.returnData = json.dumps(_prefs_export(data))
+            elif action == 'import':
+                args.returnData = json.dumps(_prefs_import(data))
             else:
                 args.returnData = json.dumps({'ok': False, 'error': 'Unknown action.'})
         except Exception:
