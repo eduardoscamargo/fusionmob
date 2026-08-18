@@ -597,6 +597,30 @@
       </div>
     </div>
 
+    <!-- PUXADOR INTEGRADO (frente estendida) -->
+    <div class="section" id="secPuxador">
+      <button class="shead" data-toggle="secPuxador">
+        <span>Puxador integrado</span><span class="tag">— sem puxador, frente estendida</span>
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="sbody">
+        <p class="hint">Armário <b>sem puxador</b>: a frente é cortada mais comprida e passa da
+           borda do armário, embaixo (sobre o recuo do rodapé) ou em cima. A <b>aba</b> que sobra
+           é a pegada. Vale só para frentes <b>sobrepostas</b> que chegam à borda do armário — as
+           frentes do meio de uma pilha não têm para onde avançar. O corpo e o interior não mudam.</p>
+        <div class="dg-anchor" data-diagram="puxador"></div>
+        <div class="row"><label>Sem puxador (frente estendida)</label>
+          <span class="sw"><input type="checkbox" id="pxEnabled"><span class="track"></span></span></div>
+        <div class="row"><label>Lado da pegada</label>
+          <select id="pxSide" class="grow">
+            <option value="bottom">Embaixo (aba inferior)</option>
+            <option value="top">Em cima (aba superior)</option>
+          </select></div>
+        <div class="row"><label>Altura da aba (pegada)</label>
+          <div class="field"><input type="number" id="pxSize" step="5" min="0"><span class="unit">mm</span></div></div>
+      </div>
+    </div>
+
     <!-- FITA (edge banding) -->
     <div class="section open" id="secFita">
       <button class="shead" data-toggle="secFita">
@@ -1056,6 +1080,11 @@ function syncFormFromCfg(){
   ae=byId("arrThickness"); if(ae) ae.value = (ar.t!=null?ar.t:18);
   fillSelect("arrMaterial", ["(mesmo do corpo)"].concat(state.materials),
              ar.material||"(mesmo do corpo)");
+  // Puxador integrado (frente estendida): handleless fronts with a grip lip.
+  var px = c.puxador||{}, pe;
+  pe=byId("pxEnabled"); if(pe) pe.checked = !!px.enabled;
+  pe=byId("pxSide");    if(pe) pe.value = (px.side==="top"?"top":"bottom");
+  pe=byId("pxSize");    if(pe) pe.value = (px.size!=null?px.size:40);
   // Fixação do fundo (back-panel mounting mode): groove vs overlay.
   var bmEl=byId("back_mode"); if(bmEl) bmEl.value = c.back_mode||"groove";
   syncSlideFields();
@@ -1168,6 +1197,12 @@ function readCfgFromForm(){
   ur=byId("arrSideGap");   if(ur) c.arremate.side_gap = parseFloat(ur.value)||0;
   ur=byId("arrThickness"); if(ur) c.arremate.t        = parseFloat(ur.value)||0;
   ur=byId("arrMaterial");  if(ur) c.arremate.material = (ur.value==="(mesmo do corpo)"?"":ur.value);
+  // Puxador integrado (frente estendida).
+  if(!c.puxador) c.puxador = {};
+  var pr;
+  pr=byId("pxEnabled"); if(pr) c.puxador.enabled = pr.checked;
+  pr=byId("pxSide");    if(pr) c.puxador.side    = (pr.value==="top"?"top":"bottom");
+  pr=byId("pxSize");    if(pr) c.puxador.size    = parseFloat(pr.value)||0;
   // Fixação do fundo (back-panel mounting mode).
   var bmr=byId("back_mode"); if(bmr) c.back_mode = bmr.value;
 }
@@ -1525,7 +1560,7 @@ function bindForm(){
   // Hiding is cosmetic only — readCfgFromForm reads every field regardless.
   function applyAdvanced(){
     var on = byId("advancedMode").checked;
-    ["secStructure","secJoinery","secTamponamento","secArremate","secFronts","secFita","secAdvanced"].forEach(function(id){
+    ["secStructure","secJoinery","secTamponamento","secArremate","secFronts","secPuxador","secFita","secAdvanced"].forEach(function(id){
       var el = byId(id); if (el) el.style.display = on ? "" : "none";
     });
   }
@@ -1602,6 +1637,7 @@ function demoCfg(){
     joinery:{bottom_mode:"aligned",bottom_overhang:0,top_mode:"aligned",top_overhang:0,sides_to_floor:false},
     tamponamento:{left:false,right:false,top:false,t:18,material:"",front_overhang:0},
     arremate:{top:false,top_gap_mode:"gap",top_gap:50,ceiling_height:2400,top_inline_fronts:false,top_side_returns:true,left:false,right:false,side_gap:30,t:18,material:""},
+    puxador:{enabled:false,side:"bottom",size:40},
     tol:{dado_bottom_clearance:0.5,dado_side_clearance:0.2,shelf_back_gap:1,
          shelf_front_setback:30,shelf_door_clearance:2},
     layout:{type:"shelves",count:3,inset:false,gap:null,shelf_align_front:null,
@@ -1796,6 +1832,38 @@ var DIAGRAMS = {
     + '<text class="lbl-m" x="130" y="282">frente</text>'
     + _lead(206,272,170,292,"esp.",210,268)
   },
+  /* Side sections: the handleless front cut longer than the region so it hangs
+     past the cabinet edge — below (over the toe-kick recess) or above. The
+     protruding aba is the grip. */
+  puxador:{ vb:"0 0 260 300", cap:
+    "Sem puxador: a frente é cortada mais comprida e passa da borda do armário — embaixo "
+    + "(sobre o recuo do rodapé) ou em cima. A aba que sobra é a pegada. Só em frentes "
+    + "sobrepostas que chegam à borda do armário; o corpo e o interior não mudam.",
+    svg:
+    // (A) aba inferior — the front hangs down in front of the toe-kick recess
+      '<text class="lbl-m" x="130" y="16">vista lateral — aba embaixo</text>'
+    + '<rect class="pnl"  x="76"  y="34"  width="128" height="78"/>'
+    + '<rect class="pnl2" x="108" y="112" width="10"  height="34"/>'
+    + '<line class="floor" x1="30" y1="146" x2="230" y2="146"/>'
+    + '<rect class="pnl2" x="64"  y="38"  width="12"  height="102"/>'
+    + '<text class="lbl-m" x="144" y="78">armário</text>'
+    + '<text class="lbl-m" x="57"  y="70" transform="rotate(-90 57 70)">frente</text>'
+    + '<text class="lbl-m" x="150" y="141">rodapé recuado</text>'
+    + '<text class="lbl-m" x="215" y="158">piso</text>'
+    + '<line class="dim" x1="64" y1="112" x2="40" y2="112"/>'
+    + '<line class="dim" x1="64" y1="140" x2="40" y2="140"/>'
+    + _dimV(40,112,140,"aba")
+    + _lead(124,168,80,140,"pegada",146,172)
+    // (B) aba superior — the same front, mirrored to the top edge
+    + '<text class="lbl-m" x="130" y="186">aba em cima</text>'
+    + '<rect class="pnl"  x="76" y="214" width="128" height="78"/>'
+    + '<rect class="pnl2" x="64" y="194" width="12"  height="98"/>'
+    + '<text class="lbl-m" x="144" y="258">armário</text>'
+    + '<line class="dim" x1="64" y1="194" x2="40" y2="194"/>'
+    + '<line class="dim" x1="64" y1="214" x2="40" y2="214"/>'
+    + _dimV(40,194,214,"aba")
+    + _lead(162,197,82,201,"pegada",188,194)
+  },
   doors:{ vb:"0 0 260 200", cap:
     "N portas iguais · folga = reveal entre as portas e nas bordas · espessura (door_t). "
     + "Sobreposta cobre a frente; embutida assenta no vão.",
@@ -1976,6 +2044,10 @@ var HELP = {
   arrSideGap:"Largura de cada régua lateral = folga entre a lateral do armário e a parede, em mm. Aumenta a largura externa por lado ligado.",
   arrThickness:"Grossura da chapa das peças de arremate, em mm.",
   arrMaterial:"Chapa das peças de arremate. Escolha “(mesmo do corpo)” para herdar o material da carcaça.",
+  // Puxador integrado (frente estendida)
+  pxEnabled:"Dispensa o puxador: a frente é cortada mais comprida e passa da borda do armário; a aba que sobra é a pegada. Só vale para frentes sobrepostas que chegam à borda do armário.",
+  pxSide:"De que lado a frente avança: embaixo (aba sobre o recuo do rodapé, pega-se por baixo) ou em cima (pega-se por cima).",
+  pxSize:"Quanto a frente avança além da borda do armário, em mm (~30–40 mm dá uma pegada confortável). Com rodapé, a aba inferior é limitada à altura do rodapé para não passar do piso.",
   // Avançado — tolerâncias
   tol_dado_bottom_clearance:"Folga extra no fundo do rasgo (dado) para o painel encaixar sem forçar, em mm.",
   tol_dado_side_clearance:"Folga extra nas laterais do rasgo (largura da ranhura vs. espessura do painel), em mm.",

@@ -25,7 +25,7 @@ import math
 
 # Add-in version (keep in sync with FusionMob.manifest). Bump the patch digit
 # (last number) on every modification — see CLAUDE.md "Versioning".
-__version__ = '1.18.0'
+__version__ = '1.19.0'
 
 app = None
 ui = None
@@ -396,6 +396,93 @@ def resolve_arremate_top_gap(cfg):
     return float(arr.get('top_gap', 0.0))
 
 
+# Puxador integrado (frente estendida): the handleless cabinet. Instead of a
+# handle, the FRONT is made longer than the region it covers and overhangs the
+# carcass at the bottom (or the top), so the protruding edge becomes the lip the
+# user hooks their fingers on to pull the door / drawer open.
+#
+# Only OVERLAY (sobreposta) fronts can do this — an inset front sits inside the
+# opening and has nowhere to extend to — and only the fronts that reach the
+# cabinet's own bottom/top edge (a front in the middle of a stacked layout would
+# run into its neighbour). Everything else is untouched: the lip only grows the
+# front panel, so the carcass, interior datums, region grid, back, shelves,
+# drawer boxes and hinge boring are all unaffected. Cut-list only (the taller
+# front is simply a bigger part) — the lip is noted in Complemento.
+#
+# 'size' is how far the front reaches past the carcass edge (mm). With a bottom
+# lip the front hangs in FRONT of the toe-kick recess (the kick is set back, so
+# nothing shares volume) — that is exactly what makes the grip work, and it is
+# why the lip is clamped to the kick height: any longer and the front would run
+# past the floor. See resolve_grip_size, the single seam every consumer reads.
+PUXADOR = {
+    'enabled': False,      # off by default: cabinets keep their plain fronts
+    'side': 'bottom',      # 'bottom' (aba inferior) | 'top' (aba superior)
+    'size': 40.0,          # how far the front extends past the carcass edge (mm)
+}
+
+
+# Which edge of the cabinet the handleless grip lip extends past. See PUXADOR.
+PUXADOR_SIDE_CHOICES = [('bottom', 'Embaixo (aba inferior)'),
+                        ('top', 'Em cima (aba superior)')]
+
+
+def _puxador_side_label(value):
+    for v, lbl in PUXADOR_SIDE_CHOICES:
+        if v == value:
+            return lbl
+    return PUXADOR_SIDE_CHOICES[0][1]
+
+
+def _puxador_side_value(label):
+    for v, lbl in PUXADOR_SIDE_CHOICES:
+        if lbl == label:
+            return v
+    return 'bottom'
+
+
+def resolve_grip_size(cfg):
+    """Effective handleless grip-lip length in mm (0 when the option is off).
+
+    A bottom lip hangs in front of the toe-kick recess, so it is clamped to the
+    kick height — a longer one would reach past the floor. Pure — no adsk
+    dependency, unit-testable. This is the single seam the builder and validation
+    read the lip through, so the two can't drift."""
+    px = cfg.get('puxador') or PUXADOR
+    if not px.get('enabled'):
+        return 0.0
+    size = max(0.0, float(px.get('size', 0.0) or 0.0))
+    if px.get('side', 'bottom') != 'top' and cfg.get('with_toe_kick'):
+        size = min(size, max(0.0, float(cfg.get('toe_kick_height', 0.0) or 0.0)))
+    return size
+
+
+def grip_lip_extents(px, size_mm, band, carcass_z0_c, carcass_z1_c, inset):
+    """(bottom, top) extra front reach in cm for one leaf band.
+
+    Non-zero only for an OVERLAY front whose overlay reach already lands on the
+    cabinet's own bottom/top edge — the only place a lip has room to hang. Pure:
+    `carcass_z0_c`/`carcass_z1_c` are the carcass bottom/top faces (cm)."""
+    if inset or size_mm <= 0:
+        return 0.0, 0.0
+    size_c = size_mm / 10.0
+    eps = 1e-6
+    if px.get('side', 'bottom') == 'top':
+        return (0.0, size_c) if abs((band.z1 + band.ext_t) - carcass_z1_c) <= eps else (0.0, 0.0)
+    return (size_c, 0.0) if abs((band.z0 - band.ext_b) - carcass_z0_c) <= eps else (0.0, 0.0)
+
+
+def grip_note(lip_b_c, lip_t_c):
+    """Complemento note for a front carrying a handleless grip lip (cm extents),
+    or '' when it has none. CorteCloud has no usinagem field, so the lip is
+    called out in the part's Complemento (same convention as the hinge/slide
+    furacao notes) — the part itself is simply cut longer."""
+    if lip_b_c > 0:
+        return 'puxador integrado: aba de {0:.0f}mm embaixo'.format(lip_b_c * 10.0)
+    if lip_t_c > 0:
+        return 'puxador integrado: aba de {0:.0f}mm em cima'.format(lip_t_c * 10.0)
+    return ''
+
+
 def fita_tape(fita_cfg, group):
     """Resolve a fita group ('carcass'/'fronts') to its tape name, or '' when the
     group is off ('none'). Pure — no adsk dependency, unit-testable."""
@@ -546,6 +633,10 @@ DEFAULT_CFG = {
     # (top sanefa) and/or side walls (front reguas). Adds to the envelope; interior
     # unaffected. See ARREMATE.
     'arremate': dict(ARREMATE),
+    # Puxador integrado (frente estendida): handleless fronts that overhang the
+    # cabinet at the bottom (or top) so the protruding edge is the grip. Off by
+    # default; overlay fronts only. See PUXADOR / resolve_grip_size.
+    'puxador': dict(PUXADOR),
     # Interior LAYOUT. None is a sentinel meaning "derive a single-region layout
     # from the flat fields above" (see normalize_cfg / _synthesize_layout_from_flat)
     # so old stored cabinets and the classic New/Edit dialog keep working. The
@@ -1857,7 +1948,12 @@ def build_shelves(band, node, ctx, prefix, min_front_setback=0.0):
 def build_doors(band, node, ctx, prefix):
     """Frameless doors filling the band (overlay or inset), with concealed-hinge
     cup bores and — for the outermost doors, whose hinge sits at a real vertical
-    panel — mounting-plate pilots registered onto that panel via ctx.hole_map."""
+    panel — mounting-plate pilots registered onto that panel via ctx.hole_map.
+
+    A handleless cabinet (puxador integrado) makes the doors longer than the
+    region: the lip hangs past the cabinet's bottom/top edge and is the grip. The
+    hinges still spread over the CARCASS-covered part of the door, so the plate
+    pilots stay inside the side panel."""
     n = node['count']
     gap = ctx.door_gap if node.get('gap') is None else node['gap']
     gap_c = gap / 10.0
@@ -1881,7 +1977,14 @@ def build_doors(band, node, ctx, prefix):
         region_h_mm = ((band.z1 + band.ext_t) - (band.z0 - band.ext_b)) * 10.0
         door_y0_c, door_back_c = -dt_c, 0.0
 
-    door_h_mm = region_h_mm - 2 * gap
+    # Handleless grip lip (puxador integrado): grow the door past the cabinet edge.
+    # The hinge layout keeps using the CORE (un-lipped) extent so the plate pilots
+    # stay within the side panel.
+    lip_b, lip_t = grip_lip_extents(ctx.puxador, ctx.grip_size, band,
+                                    ctx.carcass_z0_c, ctx.carcass_z1_c, inset)
+    core_z0, core_h_mm = door_z0, region_h_mm - 2 * gap
+    door_z0 = core_z0 - lip_b
+    door_h_mm = core_h_mm + (lip_b + lip_t) * 10.0
     door_w_mm = (region_w_mm - (n + 1) * gap) / n
     door_w_c = door_w_mm / 10.0
     door_h_c = door_h_mm / 10.0
@@ -1889,13 +1992,13 @@ def build_doors(band, node, ctx, prefix):
 
     hinge_zs = []
     if with_hinges:
-        hinge_zs = hinge_z_positions(door_h_mm, door_z0, hinge['end_inset'])
+        hinge_zs = hinge_z_positions(core_h_mm, core_z0, hinge['end_inset'])
         sb = int(node.get('shelves_behind', 0) or 0)
         shelf_bottoms = band_shelf_z_bottoms(band.z0, band.z1, ctx.t, sb) if sb > 0 else []
         if shelf_bottoms:
             cup_rad_c = (hinge['cup_diameter'] / 2.0) / 10.0
-            lo = door_z0 + cup_rad_c + 0.5
-            hi = door_z0 + door_h_mm / 10.0 - cup_rad_c - 0.5
+            lo = core_z0 + cup_rad_c + 0.5
+            hi = core_z0 + core_h_mm / 10.0 - cup_rad_c - 0.5
             hinge_zs, unresolved = resolve_hinge_conflicts(
                 hinge_zs, shelf_bottoms, ctx.tc, lo, hi, hinge['shelf_clearance'] / 10.0)
             if unresolved:
@@ -1925,6 +2028,7 @@ def build_doors(band, node, ctx, prefix):
     cup_d = min(hinge['cup_depth'], door_t - 2.0) / 10.0
     edge_c = hinge['cup_edge'] / 10.0
     eps = 0.01
+    lip_note = grip_note(lip_b, lip_t)
     for i in range(n):
         x0 = span0_c + gap_c + i * (door_w_c + gap_c)
         ctx.door_i += 1
@@ -1937,12 +2041,17 @@ def build_doors(band, node, ctx, prefix):
         else:
             hinge_x_c, hinge_side = x0 + door_w_c, 'right'
         cup_holes = None
+        notes = []
         if with_hinges:
             cup_x = x0 + edge_c if hinge_side == 'left' else x0 + door_w_c - edge_c
             cup_holes = [(cup_x, door_back_c + eps, z, cup_x, door_back_c - cup_d, z, cup_r)
                          for z in hinge_zs]
-            data['complemento'] = '{0} ({1}x dobradica caneco {2:.0f}mm)'.format(
-                name, len(hinge_zs), hinge['cup_diameter'])
+            notes.append('{0}x dobradica caneco {1:.0f}mm'.format(
+                len(hinge_zs), hinge['cup_diameter']))
+        if lip_note:
+            notes.append(lip_note)
+        if notes:
+            data['complemento'] = '{0} ({1})'.format(name, ', '.join(notes))
         d_occ = add_solid_panel(ctx.cabinet_comp, name,
                                 (x0, door_y0_c, door_z0, door_w_c, dt_c, door_h_c),
                                 data, holes=cup_holes)
@@ -1958,7 +2067,12 @@ def build_doors(band, node, ctx, prefix):
 def build_drawers(band, node, ctx, prefix):
     """A stack of N drawers filling the band: box (2 sides + front + back + a
     dadoed bottom) + a face, plus slide proxies/model slots. Box width derives
-    from the band's clear width so slides fit whatever bounds the region."""
+    from the band's clear width so slides fit whatever bounds the region.
+
+    With a handleless cabinet (puxador integrado) only the face at the very
+    bottom/top of the stack can carry the grip lip — the ones in the middle have
+    a neighbouring face there — so that one face is cut longer and the others are
+    untouched. The boxes never move: they are laid out against the carcass."""
     spec = _resolve_leaf_slide(node, ctx)
     drawer = ctx.drawer
     n = node['count']
@@ -1988,6 +2102,10 @@ def build_drawers(band, node, ctx, prefix):
     face_x0_c = span0_c + dg_c
     face_h_mm = (region_h_mm - (n + 1) * gap_mm) / n
     face_h_c = face_h_mm / 10.0
+    # Handleless grip lip (puxador integrado): only the outermost face of the
+    # stack reaches the cabinet edge, so only that one is extended.
+    lip_b, lip_t = grip_lip_extents(ctx.puxador, ctx.grip_size, band,
+                                    ctx.carcass_z0_c, ctx.carcass_z1_c, inset)
 
     # The runner eats clear width: a side-mounted one sits beside each box side,
     # an undermount one only needs a small air gap (see slide_side_space).
@@ -2064,12 +2182,22 @@ def build_drawers(band, node, ctx, prefix):
              bot_w_mm / 10.0, bot_d_mm / 10.0, bpt_c),
             make_panel_data('Fundo', label + ' Fundo', bot_w_mm, bot_d_mm, drawer['bottom_material']))
 
-        face_data = make_panel_data('Porta', label + ' Frente', face_h_mm, face_w_mm,
+        # Grip lip: the bottom face grows DOWN (its z0 drops), the top one grows UP.
+        # Either way the box above stays where it was placed against the carcass.
+        f_lip_b = lip_b if i == 0 else 0.0
+        f_lip_t = lip_t if i == n - 1 else 0.0
+        f_z0 = fz0 - f_lip_b
+        f_h_c = face_h_c + f_lip_b + f_lip_t
+        face_data = make_panel_data('Porta', label + ' Frente', f_h_c * 10.0, face_w_mm,
                                     drawer['face_material'], girar='Nao', band=ctx.fita_front)
-        face_data['complemento'] = '{0} Frente (corredica {1}, par {2:.0f}mm)'.format(
-            label, spec['description'], spec['nominal_length_mm'])
+        f_notes = 'corredica {0}, par {1:.0f}mm'.format(
+            spec['description'], spec['nominal_length_mm'])
+        f_lip_note = grip_note(f_lip_b, f_lip_t)
+        if f_lip_note:
+            f_notes += ', ' + f_lip_note
+        face_data['complemento'] = '{0} Frente ({1})'.format(label, f_notes)
         add_solid_body(dcomp, label + ' Frente',
-            (face_x0_c, face_y0_c, fz0, face_w_c, face_t_c, face_h_c), face_data)
+            (face_x0_c, face_y0_c, f_z0, face_w_c, face_t_c, f_h_c), face_data)
 
         for side, box in slide_proxy_slots(spec, box_x0_c, box_outer_w_c, box_y0_c,
                                            bz0, box_h_c, side_space_c, box_depth_c):
@@ -2315,6 +2443,11 @@ def build_cabinet(design, cfg, translation=None):
     # Arremate (ajuste) scribe / gap-filler pieces; material '' inherits carcass.
     arremate = cfg.get('arremate', ARREMATE)
     arremate_material = arremate.get('material') or material
+    # Puxador integrado (frente estendida): the handleless grip lip. The effective
+    # length is resolved once here (clamped to the toe kick, see resolve_grip_size)
+    # and read by the front builders through ctx.
+    puxador = cfg.get('puxador', PUXADOR)
+    grip_size = resolve_grip_size(cfg)
     # Edge banding tapes for this build (see FITA / fita_tape). '' when a group
     # is off. 'carcass' bands the front edge of sides/base/top/shelves/dividers;
     # 'fronts' bands doors/faces (all four) and the toe-kick front board.
@@ -2378,6 +2511,18 @@ def build_cabinet(design, cfg, translation=None):
 
     inner_w = W - 2 * t  # clear width between the sides (mm)
     warnings = []
+
+    # Handleless grip lip: report what the clamp did, and flag a bottom lip on a
+    # cabinet with no toe kick (it then hangs below the base — fine for a wall
+    # unit, surprising for one standing on the floor).
+    if puxador.get('enabled') and puxador.get('side', 'bottom') != 'top':
+        _asked = max(0.0, float(puxador.get('size', 0.0) or 0.0))
+        if with_toe_kick and _asked > grip_size + 1e-6:
+            warnings.append('Puxador: a aba inferior foi limitada a altura do rodape '
+                            '({0:.0f}mm) para nao passar do piso.'.format(grip_size))
+        elif not with_toe_kick and grip_size > 0:
+            warnings.append('Puxador: sem rodape, a aba inferior fica abaixo da base do '
+                            'armario (ok para armario aereo).')
 
     # --- Side<->base/top joinery (Fixacao Lateral) --------------------------
     # Per junction: 'aligned' captures the horizontal panel BETWEEN full-height
@@ -2608,6 +2753,13 @@ def build_cabinet(design, cfg, translation=None):
     ctx.hw_xform = hw_xform
     ctx.hw_slots = hw_slots
     ctx.shelf_align_front_default = shelf_align_front
+    # Handleless grip lip (puxador integrado): the overlay fronts that reach the
+    # carcass bottom/top face are cut longer so their protruding edge is the grip.
+    # Nothing else moves — the builders read these three through grip_lip_extents.
+    ctx.puxador = puxador
+    ctx.grip_size = grip_size
+    ctx.carcass_z0_c = z_off              # carcass bottom face (base underside)
+    ctx.carcass_z1_c = z_off + Hbox_c     # carcass top face
     ctx.warnings = warnings
     ctx.door_occs = []
     ctx.drawer_bundles = []
@@ -2863,6 +3015,17 @@ def is_split(node):
     return isinstance(node, dict) and 'split' in node
 
 
+def layout_has_overlay_fronts(node):
+    """True when the region tree carries at least one OVERLAY (sobreposta) door or
+    drawer leaf — i.e. a front the handleless grip lip could extend. Pure."""
+    if is_split(node):
+        return any(layout_has_overlay_fronts(ch.get('node'))
+                   for ch in (node.get('children') or []))
+    if not isinstance(node, dict):
+        return False
+    return node.get('type') in ('doors', 'drawers') and not node.get('inset')
+
+
 def is_layout_split(cfg):
     """True when the cabinet carries a non-trivial (multi-region) layout the
     classic New/Edit dialog cannot represent — used to defer to the palette."""
@@ -2932,7 +3095,7 @@ def _normalize_layout_node(node):
 def normalize_cfg(cfg):
     """Fill any missing keys from the defaults (robust to older stored configs)."""
     out = dict(DEFAULT_CFG)
-    out.update({k: cfg[k] for k in cfg if k not in ('tol', 'hinge', 'drawer', 'slide', 'fita', 'joinery', 'tamponamento', 'arremate', 'layout')})
+    out.update({k: cfg[k] for k in cfg if k not in ('tol', 'hinge', 'drawer', 'slide', 'fita', 'joinery', 'tamponamento', 'arremate', 'puxador', 'layout')})
     tol = dict(DEFAULT_TOL)
     if isinstance(cfg.get('tol'), dict):
         tol.update(cfg['tol'])
@@ -2965,6 +3128,10 @@ def normalize_cfg(cfg):
     if isinstance(cfg.get('arremate'), dict):
         arremate.update(cfg['arremate'])
     out['arremate'] = arremate
+    puxador = dict(PUXADOR)
+    if isinstance(cfg.get('puxador'), dict):
+        puxador.update(cfg['puxador'])
+    out['puxador'] = puxador
     # Per-panel fita overrides: always a fresh dict so we never alias the shared
     # DEFAULT_CFG default across cabinets.
     po = cfg.get('panel_overrides')
@@ -2991,7 +3158,7 @@ def _select_dropdown(dd, name):
 # visibility, so the (default or loaded) values still drive the build.
 _CABINET_ADVANCED_IDS = ('thickness', 'shelfAlignFront', 'backGroup', 'toeKickGroup',
                          'doorGroup', 'drawerGroup', 'joineryGroup', 'tamponamentoGroup',
-                         'arremateGroup', 'fitaGroup', 'advGroup')
+                         'arremateGroup', 'puxadorGroup', 'fitaGroup', 'advGroup')
 
 
 def _apply_cabinet_advanced_visibility(inputs, visible):
@@ -3287,6 +3454,30 @@ def add_cabinet_inputs(inputs, cfg):
     if not ar_mat.selectedItem:
         ar_mat.listItems.item(0).isSelected = True
 
+    # Puxador integrado (frente estendida): handleless fronts. The doors/drawer
+    # faces that reach the cabinet's bottom (or top) edge are cut longer, and the
+    # protruding lip is what the user pulls. Overlay fronts only; off by default.
+    # Gated behind Configuracao avancada.
+    px = cfg.get('puxador', PUXADOR)
+    px_group = inputs.addGroupCommandInput('puxadorGroup', 'Puxador integrado (frente estendida)')
+    px_group.isExpanded = bool(px.get('enabled', False))
+    pxg = px_group.children
+    px_on = pxg.addBoolValueInput('puxadorEnabled', 'Sem puxador (frente estendida)',
+                                  True, '', bool(px.get('enabled', False)))
+    px_on.tooltip = ('Dispensa o puxador: a frente passa da borda do armario e a aba '
+                     'que sobra serve de pegada. So vale para frentes sobrepostas.')
+    px_side = pxg.addDropDownCommandInput(
+        'puxadorSide', 'Lado da pegada', adsk.core.DropDownStyles.TextListDropDownStyle)
+    _cur_px_side = _puxador_side_label(px.get('side', 'bottom'))
+    for (_v, _lbl) in PUXADOR_SIDE_CHOICES:
+        px_side.listItems.add(_lbl, _lbl == _cur_px_side)
+    if not px_side.selectedItem:
+        px_side.listItems.item(0).isSelected = True
+    px_size = pxg.addValueInput('puxadorSize', 'Altura da aba (pegada)', 'mm',
+                                adsk.core.ValueInput.createByReal(float(px.get('size', 40.0)) / 10.0))
+    px_size.tooltip = ('Quanto a frente avanca alem da borda do armario. Com rodape a aba '
+                       'e limitada a altura do rodape para nao passar do piso.')
+
     # Edge banding (fita) — its own group (not buried in Advanced), since which
     # edges get taped and how thick is a primary cut-list decision. Two editable
     # tape names (0.4mm / 1mm) plus the thickness per part group: 'carcass' = the
@@ -3452,6 +3643,11 @@ def read_cabinet_inputs(inputs):
             'material': ('' if inputs.itemById('arrMaterial').selectedItem.name == '(mesmo do corpo)'
                          else inputs.itemById('arrMaterial').selectedItem.name),
         },
+        'puxador': {
+            'enabled': inputs.itemById('puxadorEnabled').value,
+            'side': _puxador_side_value(inputs.itemById('puxadorSide').selectedItem.name),
+            'size': inputs.itemById('puxadorSize').value * 10.0,
+        },
     }
 
 
@@ -3544,6 +3740,10 @@ def write_cabinet_inputs(inputs, cfg):
     inputs.itemById('arrThickness').value = float(arr.get('t', 18.0)) / 10.0
     _select_dropdown(inputs.itemById('arrMaterial'),
                      arr.get('material') or '(mesmo do corpo)')
+    px = cfg.get('puxador', PUXADOR)
+    inputs.itemById('puxadorEnabled').value = bool(px.get('enabled', False))
+    _select_dropdown(inputs.itemById('puxadorSide'), _puxador_side_label(px.get('side', 'bottom')))
+    inputs.itemById('puxadorSize').value = float(px.get('size', 40.0)) / 10.0
 
 
 def validate_cfg(cfg):
@@ -3614,6 +3814,23 @@ def validate_cfg(cfg):
             return 'Folga do arremate superior (ate o teto) deve ser maior que zero.'
     if (ar.get('left') or ar.get('right')) and float(ar.get('side_gap', 0.0)) <= 0:
         return 'Folga do arremate lateral (ate a parede) deve ser maior que zero.'
+    # Puxador integrado (frente estendida): a positive lip, a known side, and no
+    # other piece already occupying the space the lip grows into. A TOP lip lives
+    # in front of the tampo (y < 0), exactly where a faced sanefa / a forward
+    # tamponamento superior sit — those combinations would share volume.
+    px = cfg.get('puxador', {})
+    if px.get('enabled'):
+        if px.get('side', 'bottom') not in ('bottom', 'top'):
+            return "Puxador: lado invalido (use 'bottom' ou 'top')."
+        if float(px.get('size', 0.0) or 0.0) <= 0:
+            return 'Altura da aba do puxador deve ser maior que zero.'
+        if px.get('side') == 'top' and layout_has_overlay_fronts(cfg['layout']):
+            if ar.get('top') and ar.get('top_inline_fronts'):
+                return ('Puxador com aba superior nao combina com a sanefa faceada com as '
+                        'frentes: as duas ocupam o mesmo espaco a frente do tampo.')
+            if tp.get('top') and float(tp.get('front_overhang', 0.0)) > 0:
+                return ('Puxador com aba superior nao combina com tamponamento superior '
+                        'com avanco frontal: as pecas se sobrepoem.')
     # Interior layout: walk the region tree (same planner the builder uses, so a
     # split that validates always builds) and check that each leaf fits its band.
     kick_h = cfg['toe_kick_height'] if cfg['with_toe_kick'] else 0.0
