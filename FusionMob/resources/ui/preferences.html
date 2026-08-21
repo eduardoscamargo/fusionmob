@@ -4,86 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FusionMob - Preferências</title>
+<!-- Shared palette styling (theme, form rows, diagrams, tooltips). Anything the
+     configuration form renders is styled there, so both palettes stay in step. -->
+<link rel="stylesheet" href="cabinet_config.css">
 <style>
-  /* Fusion 360-inspired dark theme, matching layout_editor.html. Single narrow
-     column (the palette docks at ~480px). Common defaults first; shop-level knobs
-     live inside collapsed "Avancado" sections. */
-  :root {
-    --bg:#2b2b2b; --bg-2:#323232; --panel:#3a3a3a; --panel-2:#434343;
-    --line:#242424; --line-2:#4d4d4d;
-    --ink:#e8e8e8; --muted:#9a9a9a; --faint:#777;
-    --accent:#0696d7; --accent-2:#29b6e8; --accent-ink:#fff;
-    --ok:#6cc04a; --warn:#e6a23c; --err:#ec5b56;
-    --radius:6px;
-  }
-  * { box-sizing:border-box; }
-  html,body { height:100%; }
-  body { margin:0; font:13px/1.45 "Segoe UI",Roboto,Arial,sans-serif; color:var(--ink);
-         background:var(--bg); -webkit-font-smoothing:antialiased; }
-  h1,h2,h3,h4 { margin:0; font-weight:600; }
-  button { font-family:inherit; }
-  ::-webkit-scrollbar { width:10px; height:10px; }
-  ::-webkit-scrollbar-thumb { background:#555; border-radius:6px; border:2px solid var(--bg); }
-  ::-webkit-scrollbar-track { background:transparent; }
-
-  .app { display:flex; flex-direction:column; height:100vh; }
-  .topbar { display:flex; align-items:center; gap:8px; padding:8px 12px;
-            background:linear-gradient(180deg,#3d3d3d,#333); border-bottom:1px solid var(--line);
-            flex:0 0 auto; }
-  .brand { display:flex; align-items:center; gap:8px; margin-right:auto; }
-  .brand .logo { width:22px; height:22px; border-radius:5px; flex:0 0 auto;
-                 background:linear-gradient(135deg,var(--accent),#0b6ea8);
-                 display:flex; align-items:center; justify-content:center; color:#fff;
-                 font-weight:700; font-size:13px; }
-  .brand .title { font-size:13px; font-weight:600; letter-spacing:.02em; }
-  .brand .sub { font-size:10px; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; }
-
-  .scroll { flex:1 1 auto; overflow-y:auto; overflow-x:hidden; padding:12px; }
-
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
-          margin:0 0 12px; overflow:hidden; }
-  .card > .head { display:flex; align-items:center; gap:8px; padding:10px 12px;
-                  font-size:12px; font-weight:600; letter-spacing:.03em; }
-  .card > .body { padding:4px 12px 12px; }
-
-  .section { border:1px solid var(--line); border-radius:var(--radius); margin:0 0 10px;
-             background:var(--bg-2); overflow:hidden; }
-  .section > .shead { display:flex; align-items:center; gap:8px; width:100%; cursor:pointer;
-                      padding:11px 12px; background:none; border:0; color:var(--ink);
-                      font-size:12px; font-weight:600; text-align:left; letter-spacing:.02em; }
-  .section > .shead:hover { background:var(--panel); }
-  .section > .shead .chev { margin-left:auto; transition:transform .15s ease; color:var(--muted); }
-  .section > .sbody { padding:2px 12px 12px; display:none; }
-  .section.open > .sbody { display:block; }
-  .section.open > .shead .chev { transform:rotate(90deg); }
-
-  .hint { color:var(--faint); font-size:11px; margin:2px 0 10px; }
-
-  .row { display:flex; align-items:center; gap:8px; margin:8px 0; }
-  .row > label { flex:0 0 150px; color:var(--muted); font-size:12px; }
-  .row .grow { flex:1 1 auto; min-width:0; }
-
-  input[type=number], input[type=text], select {
-    width:100%; padding:6px 8px; border:1px solid var(--line-2); border-radius:5px;
-    background:#2c2c2c; color:var(--ink); font-size:12px; outline:none; }
-  input[type=number]:focus, input[type=text]:focus, select:focus {
-    border-color:var(--accent); box-shadow:0 0 0 2px rgba(6,150,215,.25); }
-  select { cursor:pointer; }
-
-  .field { position:relative; flex:1 1 auto; }
-  .field .unit { position:absolute; right:8px; top:50%; transform:translateY(-50%);
-                 font-size:10px; color:var(--faint); pointer-events:none; }
-  .field.has-unit input { padding-right:26px; }
-
-  .sw { position:relative; display:inline-block; width:38px; height:20px; flex:0 0 auto; }
-  .sw input { position:absolute; inset:0; width:100%; height:100%; margin:0;
-              opacity:0; cursor:pointer; z-index:2; }
-  .sw .track { position:absolute; inset:0; background:#555; border-radius:20px;
-               transition:.15s; cursor:pointer; }
-  .sw .track:before { content:""; position:absolute; width:16px; height:16px; left:2px; top:2px;
-                      background:#ddd; border-radius:50%; transition:.15s; }
-  .sw input:checked + .track { background:var(--accent); }
-  .sw input:checked + .track:before { transform:translateX(18px); background:#fff; }
+  /* Page-specific chrome only: the profile bar, the materials table and the
+     sticky footer. Everything the configuration form uses lives in
+     cabinet_config.css. */
 
   /* materials table */
   table.mats { width:100%; border-collapse:collapse; margin:4px 0 10px; }
@@ -98,19 +25,6 @@
              display:inline-flex; align-items:center; justify-content:center; }
   .iconbtn:hover { background:#5a3030; border-color:#7a4040; }
 
-  .btns { display:flex; flex-wrap:wrap; gap:8px; }
-  .btn { padding:7px 12px; border:1px solid var(--line-2); border-radius:5px;
-         background:#454545; color:var(--ink); cursor:pointer; font-size:12px; font-weight:500;
-         display:inline-flex; align-items:center; gap:6px; }
-  .btn:hover { background:#525252; border-color:#666; }
-  .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
-  .btn.primary:hover { background:var(--accent-2); }
-  .btn.ghost { background:transparent; }
-  .btn.danger { background:#6a2f2c; border-color:#8a3b37; }
-  .btn.danger:hover { background:#7d3733; }
-  .btn:disabled { opacity:.45; cursor:default; }
-  .btn.sm { padding:5px 9px; font-size:11px; }
-
   /* Inline prompt/confirm rows (a palette can't rely on window.prompt/confirm). */
   .ask { display:none; align-items:center; gap:6px; margin:8px 0 0;
          padding:8px; border:1px solid var(--accent); border-radius:5px; background:#2c2c2c; }
@@ -124,57 +38,6 @@
             overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .status.ok { color:var(--ok); }
   .status.err { color:var(--err); }
-
-  /* Fixação lateral schematic (front elevation) — mirrors layout_editor.html */
-  .jn-wrap { position:relative; width:100%; max-width:240px; margin:4px auto 10px; }
-  .jn-svg { width:100%; height:auto; display:block; }
-  .jn-svg .jn-panel { fill:var(--bg-2); stroke:#888; stroke-width:1.5; }
-  .jn-svg .jn-side  { fill:#5b6b78; stroke:#8fa6b6; stroke-width:1.5; }
-  .jn-svg .jn-kick  { fill:#3c4650; stroke:#6b7885; stroke-width:1.5; }
-  .jn-svg .jn-floor { stroke:#9aa7b2; stroke-width:2; stroke-dasharray:6 5; }
-  .jn-svg .jn-lbl   { fill:var(--muted); font-size:11px; text-anchor:middle; }
-  .jn-oh { position:absolute; transform:translate(-50%,-50%);
-           display:flex; align-items:center; gap:2px; background:var(--bg-2);
-           border:1px solid var(--accent); border-radius:6px; padding:2px 4px;
-           box-shadow:0 1px 4px rgba(0,0,0,.35); }
-  .jn-oh input { width:42px; background:transparent; border:0; color:var(--ink);
-                 font-size:12px; text-align:right; outline:none; }
-  .jn-oh .unit { font-size:10px; color:var(--muted); }
-  .jn-oh.off { opacity:.35; pointer-events:none; }
-
-  /* Reference diagrams (per-section schematics with dimension callouts). Static,
-     illustrative — they show what each measurement in the section refers to. */
-  .dg-wrap { width:100%; max-width:250px; margin:2px auto 4px; }
-  .dg-svg { width:100%; height:auto; display:block; }
-  .dg-svg .pnl  { fill:var(--bg-2); stroke:#8a8a8a; stroke-width:1.5; }
-  .dg-svg .pnl2 { fill:#3c4650; stroke:#6b7885; stroke-width:1.5; }
-  .dg-svg .open { fill:var(--bg); stroke:#8a8a8a; stroke-width:1.2; }
-  .dg-svg .tape { fill:var(--accent); }
-  .dg-svg .tape2{ fill:var(--accent-2); }
-  .dg-svg .floor{ stroke:#9aa7b2; stroke-width:2; stroke-dasharray:6 5; }
-  .dg-svg .dim  { stroke:var(--accent); stroke-width:1; fill:none; }
-  .dg-svg .ar   { fill:var(--accent); }
-  .dg-svg .lbl  { fill:var(--ink);  font-size:10px; text-anchor:middle;
-                  font-family:"Segoe UI",Roboto,Arial,sans-serif; }
-  .dg-svg .lbl-m{ fill:var(--muted); font-size:9px;  text-anchor:middle;
-                  font-family:"Segoe UI",Roboto,Arial,sans-serif; }
-  .dg-cap { max-width:250px; margin:0 auto 10px; color:var(--faint);
-            font-size:10.5px; line-height:1.4; text-align:center; }
-
-  /* Inline help: a small "i" badge next to a label/option, with a floating
-     tooltip (rendered on <body> so it is never clipped by overflow:hidden). */
-  .info { display:inline-flex; align-items:center; justify-content:center;
-          width:14px; height:14px; margin-left:5px; flex:0 0 auto; cursor:help;
-          border:1px solid var(--line-2); border-radius:50%; color:var(--muted);
-          font:italic 700 9px Georgia,"Times New Roman",serif; user-select:none;
-          vertical-align:middle; transition:.12s; }
-  .info:hover, .info:focus { border-color:var(--accent); color:var(--accent-2); outline:none; }
-  .tip { position:fixed; z-index:9999; max-width:260px; padding:7px 9px;
-         background:#1e1e1e; color:var(--ink); border:1px solid var(--line-2);
-         border-radius:6px; font-size:11px; line-height:1.4; text-align:left;
-         box-shadow:0 4px 14px rgba(0,0,0,.5); pointer-events:none;
-         opacity:0; transition:opacity .12s; }
-  .tip.show { opacity:1; }
 </style>
 </head>
 <body>
@@ -266,7 +129,10 @@
       <div class="head">Padrões do armário</div>
       <div class="body">
         <div class="hint">Valores iniciais de cada novo armário. Você ainda pode alterar
-          tudo por armário nos comandos Novo/Editar Armário e Layout.</div>
+          tudo por armário nos comandos Novo/Editar Armário e Layout — as mesmas
+          seções aparecem lá, já preenchidas com o que estiver aqui.</div>
+        <!-- Rendered from the shared spec (cabinet_config.js) — never hand-write
+             configuration rows here. -->
         <div id="form"></div>
       </div>
     </div>
@@ -279,6 +145,8 @@
   </div>
 </div>
 
+<!-- The single source of truth for every cabinet configuration field. -->
+<script src="cabinet_config.js"></script>
 <script>
 /* ---- bridge to the add-in (same contract as layout_editor.html) ------------ */
 function send(action, obj){
@@ -294,753 +162,46 @@ function send(action, obj){
   return Promise.resolve(null);   // bridge not ready / running in a plain browser
 }
 
-/* ---- floating help tooltips ---------------------------------------------- */
-/* One tooltip element on <body> (so it is never clipped by the cards'
-   overflow:hidden), driven by delegated events on any [data-tip] element.
-   Delegation means dynamically re-rendered form icons work with no rebinding. */
-(function(){
-  var tip = document.createElement("div");
-  tip.className = "tip";
-  if (document.body) document.body.appendChild(tip);
-  else document.addEventListener("DOMContentLoaded", function(){ document.body.appendChild(tip); });
-  function place(el){
-    var txt = el.getAttribute("data-tip"); if(!txt) return;
-    tip.textContent = txt; tip.classList.add("show");
-    var r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
-    var left = Math.max(6, Math.min(r.left + r.width/2 - tw/2, window.innerWidth - tw - 6));
-    var top = r.top - th - 8; if (top < 6) top = r.bottom + 8;
-    tip.style.left = left + "px"; tip.style.top = top + "px";
-  }
-  function hide(){ tip.classList.remove("show"); }
-  function tgt(e){ return e.target.closest ? e.target.closest("[data-tip]") : null; }
-  document.addEventListener("mouseover", function(e){ var el=tgt(e); if(el) place(el); });
-  document.addEventListener("mouseout",  function(e){ if(tgt(e)) hide(); });
-  document.addEventListener("focusin",   function(e){ var el=tgt(e); if(el) place(el); });
-  document.addEventListener("focusout",  hide);
-  document.addEventListener("scroll",     hide, true);
-})();
+FMCFG.initTooltips();
 
 var state = { cfg:{}, materials:[], slides:[], fita_choices:[], factory:null,
               profiles:[], active:"" };
 
-/* ---- nested-path get/set on the cfg -------------------------------------- */
-function getPath(obj, path){
-  var parts = path.split("."), n = obj;
-  for (var i=0;i<parts.length;i++){ if (n==null) return undefined; n = n[parts[i]]; }
-  return n;
+/* Context handed to the shared form: which surface we are (so prefs-only fields
+   render), plus the live option lists. Kept as ONE mutable object because the
+   shared wiring closes over it. */
+var CTX = { surface:"prefs", materials:[], slides:[], fitaChoices:[],
+            onChange:null, onInput:null };
+function syncCtx(){
+  CTX.materials = state.materials
+    .map(function(m){ return String(m.name||"").trim(); })
+    .filter(function(n){ return !!n; });
+  CTX.slides = state.slides;
+  CTX.fitaChoices = state.fita_choices;
 }
-function setPath(obj, path, val){
-  var parts = path.split("."), n = obj;
-  for (var i=0;i<parts.length-1;i++){ if (n[parts[i]]==null) n[parts[i]]={}; n=n[parts[i]]; }
-  n[parts[parts.length-1]] = val;
+
+/* ---- the defaults form (all sections, rendered from the shared spec) ------- */
+function renderForm(){
+  syncCtx();
+  FMCFG.render(document.getElementById("form"), { surface:"prefs" });
+  FMCFG.wire(CTX);
+  FMCFG.writeForm(state.cfg, CTX);
+}
+function collectForm(){ FMCFG.readForm(state.cfg, CTX); }
+
+/* Material names changed in the table above -> refill every material dropdown,
+   keeping whatever the user has already typed in the form. */
+function refreshMaterialSelects(){
+  collectForm(); syncCtx(); FMCFG.writeForm(state.cfg, CTX);
 }
 
-/* ---- default-form field specification ------------------------------------ */
-/* type: num | int | text | bool | material | slide | fita */
-var SECTIONS = [
-  { title:"Dimensões e material", open:true, diagram:"dims", fields:[
-    { p:"W", l:"Largura (W)", t:"num", u:"mm",
-      h:"Largura externa do armário (dimensão frontal, esquerda→direita), em mm." },
-    { p:"H", l:"Altura (H)", t:"num", u:"mm",
-      h:"Altura externa total, JÁ incluindo o rodapé, em mm." },
-    { p:"D", l:"Profundidade (D)", t:"num", u:"mm",
-      h:"Profundidade externa (da frente até o fundo), em mm." },
-    { p:"t", l:"Espessura carcaça", t:"num", u:"mm",
-      h:"Grossura da chapa das laterais, base e tampo (ex.: 18 mm). Cada peça pode ter sua própria espessura no corte." },
-    { p:"material", l:"Material carcaça", t:"material",
-      h:"Chapa usada no corpo (laterais/base/tampo). Escolha da sua biblioteca de materiais acima." },
-    { p:"n_shelves", l:"Prateleiras", t:"int",
-      h:"Número de prateleiras internas distribuídas igualmente. Usado quando o armário é uma única região (sem layout do editor visual)." },
-    { p:"shelf_align_front", l:"Prateleiras na frente", t:"bool",
-      h:"Ligado: prateleiras alinhadas com a frente do corpo. Desligado: recuadas da frente (recuo padrão ~30 mm)." },
-  ]},
-  { title:"Fita de borda", open:true, diagram:"fita", fields:[
-    { p:"fita.name_thin", l:"Fita fina (0.4mm)", t:"text",
-      h:"Nome da fita de 0,4 mm exatamente como deve aparecer no CorteCloud (ex.: “Fita PVC 0.4mm Branco”)." },
-    { p:"fita.name_thick", l:"Fita grossa (1mm)", t:"text",
-      h:"Nome da fita de 1 mm como deve aparecer no CorteCloud." },
-    { p:"fita.carcass", l:"Fita carcaça", t:"fita",
-      h:"Espessura da fita nas bordas visíveis do corpo (borda frontal de laterais/base/tampo/prateleiras/divisórias). Nenhuma, 0,4mm ou 1mm." },
-    { p:"fita.fronts", l:"Fita frentes", t:"fita",
-      h:"Espessura da fita nas frentes — portas, frentes de gaveta e topo do rodapé — fitadas nos quatro lados." },
-  ]},
-  { title:"Fundo", open:false, diagram:"back", fields:[
-    { p:"with_back", l:"Com fundo", t:"bool",
-      h:"Adiciona um painel de fundo ao corpo do armário." },
-    { p:"back_mode", l:"Fixação do fundo", t:"sel",
-      opts:[["groove","Encaixado (ranhura)"],["overlay","Sobreposto (atrás)"]],
-      h:"Como o fundo é fixado. Encaixado: assenta numa ranhura (dado) nas laterais/base/tampo. "
-        + "Sobreposto: aplicado (aparafusado) na face traseira, em toda a largura, sem ranhura." },
-    { p:"back_material", l:"Material fundo", t:"material",
-      h:"Chapa do painel de fundo (normalmente fina, ex.: 6 mm cru)." },
-    { p:"back_t", l:"Espessura fundo", t:"num", u:"mm",
-      h:"Grossura do painel de fundo, em mm." },
-    { p:"dado_depth", l:"Profund. do rasgo", t:"num", u:"mm", rowId:"rowDadoDepth",
-      h:"Profundidade do rasgo (dado) onde o fundo encaixa, cortado nas laterais/base/tampo (só no modo encaixado)." },
-    { p:"back_setback", l:"Recuo do fundo", t:"num", u:"mm", rowId:"rowBackSetback",
-      h:"Distância da face traseira do corpo até o fundo, em mm (só no modo encaixado)." },
-  ]},
-  { title:"Rodapé", open:false, diagram:"kick", fields:[
-    { p:"with_toe_kick", l:"Com rodapé", t:"bool",
-      h:"Adiciona um rodapé (caixa separada) sob o armário. A altura total do armário já inclui o rodapé." },
-    { p:"toe_kick_material", l:"Material rodapé", t:"material",
-      h:"Chapa usada nas peças do rodapé." },
-    { p:"toe_kick_t", l:"Espessura rodapé", t:"num", u:"mm",
-      h:"Grossura da chapa do rodapé, em mm." },
-    { p:"toe_kick_height", l:"Altura rodapé", t:"num", u:"mm",
-      h:"Altura do recuo do rodapé sob o corpo, em mm (padrão BR ~100 mm)." },
-    { p:"toe_kick_setback", l:"Recuo rodapé", t:"num", u:"mm",
-      h:"Quanto a tábua frontal do rodapé recua em relação à frente do armário, em mm." },
-    { p:"toe_kick_max_span", l:"Vão máx. sem reforço", t:"num", u:"mm",
-      h:"Comprimento máximo do rodapé antes de adicionar um reforço interno, em mm." },
-  ]},
-  { title:"Fixação lateral", open:false, diagram:"joinery", fields:[
-    { p:"joinery.bottom_mode", l:"Base inferior", t:"sel",
-      opts:[["aligned","Alinhada com base"],["over","Sobre base"]],
-      h:"Como a base encontra as laterais. Alinhada: base capturada entre as laterais (laterais inteiras). Sobre base: base em toda a largura, com a lateral apoiada sobre/sob o painel." },
-    { p:"joinery.top_mode", l:"Base superior (tampo)", t:"sel",
-      opts:[["aligned","Alinhada com base"],["over","Sobre base"]],
-      h:"Idem à base inferior, mas para o tampo." },
-    { p:"joinery.sides_to_floor", l:"Laterais até o piso (pés)", t:"bool",
-      h:"Ligado: as laterais descem até o chão como pés e o rodapé fica recuado entre elas. Desligado: laterais param na base e o rodapé é uma caixa separada. Requer rodapé." },
-  ]},
-  { title:"Tamponamento (acabamento)", open:false, diagram:"tamponamento", fields:[
-    { p:"tamponamento.left", l:"Lado esquerdo", t:"bool",
-      h:"Painel de acabamento aplicado sobre a lateral esquerda (por fora da estrutura; aumenta a largura externa)." },
-    { p:"tamponamento.right", l:"Lado direito", t:"bool",
-      h:"Painel de acabamento aplicado sobre a lateral direita." },
-    { p:"tamponamento.top", l:"Superior", t:"bool",
-      h:"Painel de acabamento aplicado sobre o tampo (aumenta a altura externa)." },
-    { p:"tamponamento.t", l:"Espessura", t:"num", u:"mm",
-      h:"Grossura da chapa do tamponamento, em mm." },
-    { p:"tamponamento.front_overhang", l:"Avanço frontal", t:"num", u:"mm",
-      h:"Quanto o tamponamento avança à frente da carcaça (0 = faceado). A traseira fica alinhada com o fundo, então o painel fica mais fundo que a carcaça." },
-    { p:"tamponamento.material", l:"Material", t:"material",
-      h:"Chapa do tamponamento. Nos armários pode-se escolher \"(mesmo do corpo)\" para herdar o material da carcaça." },
-  ]},
-  { title:"Arremate (ajuste até teto/parede)", open:false, diagram:"arremate", fields:[
-    { p:"arremate.top", l:"Sanefa superior (até o teto)", t:"bool",
-      h:"Peça frontal (sanefa) sobre o tampo, do topo do armário até o teto. Fecha a folga vista de frente, dando aparência de altura total. Cortada com folga e ajustada no local." },
-    { p:"arremate.top_gap_mode", l:"Medida da sanefa", t:"sel",
-      opts:[["gap","Informar folga"],["ceiling","Informar altura do teto"]],
-      h:"Como a altura da sanefa é informada. Informar folga: você digita a folga entre o topo do armário e o teto. Informar altura do teto: você digita a altura total do ambiente (piso→teto) e a folga é calculada (altura do teto − altura do armário)." },
-    { p:"arremate.top_gap", l:"Folga até o teto", t:"num", u:"mm", rowId:"rowArrTopGap",
-      h:"Altura da sanefa = folga entre o topo do armário e o teto, em mm. Aumenta a altura externa." },
-    { p:"arremate.ceiling_height", l:"Altura do teto (piso→teto)", t:"num", u:"mm", rowId:"rowArrCeiling",
-      h:"Altura total do ambiente do piso até o teto, em mm. A folga da sanefa é calculada como esta altura menos a altura (H) do armário." },
-    { p:"arremate.top_inline_fronts", l:"Sanefa faceada com as frentes", t:"bool",
-      h:"Com portas/gavetas sobrepostas, a sanefa acompanha o plano das frentes em vez de ficar recuada na frente da carcaça. Acrescenta uma segunda chapa à frente da sanefa para completar a profundidade até as frentes." },
-    { p:"arremate.top_side_returns", l:"Sanefa em U (retornos laterais)", t:"bool",
-      h:"Fecha a sanefa em U: acrescenta um retorno de profundidade total sobre cada lateral, para as laterais expostas parecerem continuar até o teto. A tábua frontal passa a vão apenas entre os retornos. Ligado por padrão." },
-    { p:"arremate.left", l:"Régua esquerda (até a parede)", t:"bool",
-      h:"Régua frontal de arremate no lado esquerdo, para preencher a folga até a parede. Cortada com folga e escribada na parede." },
-    { p:"arremate.right", l:"Régua direita (até a parede)", t:"bool",
-      h:"Régua frontal de arremate no lado direito, para preencher a folga até a parede." },
-    { p:"arremate.side_gap", l:"Folga até a parede (cada lado)", t:"num", u:"mm",
-      h:"Largura de cada régua lateral = folga entre a lateral do armário e a parede, em mm. Aumenta a largura externa por lado ligado." },
-    { p:"arremate.t", l:"Espessura", t:"num", u:"mm",
-      h:"Grossura da chapa das peças de arremate, em mm." },
-    { p:"arremate.material", l:"Material", t:"material",
-      h:"Chapa das peças de arremate. Nos armários pode-se escolher \"(mesmo do corpo)\" para herdar o material da carcaça." },
-  ]},
-  { title:"Portas", open:false, diagram:"doors", fields:[
-    { p:"with_doors", l:"Com portas", t:"bool",
-      h:"Padrão de gerar portas frontais em novos armários (regiões de porta no editor sobrepõem isto)." },
-    { p:"n_doors", l:"Número de portas", t:"int",
-      h:"Quantidade de portas iguais na frente. Duas portas se encontram no centro." },
-    { p:"door_gap", l:"Folga entre portas", t:"num", u:"mm",
-      h:"Fresta (reveal) entre as portas e nas bordas, em mm." },
-    { p:"door_inset", l:"Porta embutida (inset)", t:"bool",
-      h:"Ligado (embutida): a porta assenta dentro do vão, faceada com a frente. Desligado (sobreposta): cobre a frente do corpo." },
-    { p:"door_material", l:"Material porta", t:"material",
-      h:"Chapa usada nas portas." },
-    { p:"door_t", l:"Espessura porta", t:"num", u:"mm",
-      h:"Grossura da chapa da porta, em mm." },
-    { p:"with_hinges", l:"Furação dobradiça", t:"bool",
-      h:"Fura o caneco de 35 mm nas portas e os pilotos da placa nas laterais (dobradiça de caneco oculta). Só geometria — não vai ao CorteCloud." },
-  ]},
-  { title:"Gavetas", open:false, diagram:"drawers", fields:[
-    { p:"with_drawers", l:"Com gavetas", t:"bool",
-      h:"Padrão de gerar uma coluna de gavetas em novos armários (regiões de gaveta no editor sobrepõem isto)." },
-    { p:"n_drawers", l:"Número de gavetas", t:"int",
-      h:"Quantidade de gavetas empilhadas na coluna." },
-    { p:"drawer_gap", l:"Folga entre gavetas", t:"num", u:"mm",
-      h:"Fresta (reveal) entre as frentes das gavetas, em mm." },
-    { p:"drawer_inset", l:"Gaveta embutida (inset)", t:"bool",
-      h:"Ligado (embutida): frentes assentam dentro do vão. Desligado (sobreposta): frentes cobrem a frente do corpo." },
-    { p:"slide_key", l:"Corrediça", t:"slide",
-      h:"Modelo de corrediça da biblioteca de ferragens. Define quanto espaço a corrediça ocupa (lateral: roldana/telescópica; oculta: sob a gaveta), "
-        + "a profundidade da caixa e a profundidade mínima do armário." },
-    { p:"slide.custom", l:"Personalizar corrediça", t:"bool",
-      h:"Ligado: as cinco medidas abaixo sobrepõem as da biblioteca de ferragens. Desligado: valem as medidas do modelo escolhido acima." },
-    { p:"slide.side_space", l:"Espaço lateral (por lado)", t:"num", u:"mm",
-      h:"Espaço que a corrediça ocupa de CADA lado, entre a lateral do móvel e a lateral externa da caixa. "
-        + "Lateral: roldana ~12,5 mm, telescópica 45 mm ~12,7 mm. Oculta: ~6,5 mm. A largura da caixa = vão livre − 2× este valor." },
-    { p:"slide.bottom_clearance", l:"Folga sob a caixa", t:"num", u:"mm",
-      h:"Folga entre o piso do vão e o fundo da caixa, em mm. A corrediça oculta trabalha nesse espaço (~13 mm); na montagem lateral basta ~3 mm." },
-    { p:"slide.back_clearance", l:"Folga no fundo", t:"num", u:"mm",
-      h:"Espaço deixado entre a traseira da caixa da gaveta e o fundo do armário, em mm." },
-    { p:"slide.box_depth", l:"Profundidade da caixa", t:"num", u:"mm",
-      h:"Profundidade (comprimento) da caixa da gaveta, em mm — normalmente igual ao comprimento nominal da corrediça." },
-    { p:"slide.min_cabinet_depth", l:"Profundidade mín. do armário", t:"num", u:"mm",
-      h:"Profundidade mínima que o armário precisa ter para esta corrediça, em mm. Usada na validação antes de gerar." },
-    { p:"insert_real_hardware", l:"Inserir modelo 3D", t:"bool",
-      h:"Ligado: importa o CAD real da corrediça. Desligado: usa uma caixa proxy leve (recomendado com muitas gavetas)." },
-    { p:"drawer.box_material", l:"Material caixa", t:"material",
-      h:"Chapa das laterais/travessas da caixa da gaveta." },
-    { p:"drawer.box_t", l:"Espessura caixa", t:"num", u:"mm",
-      h:"Grossura da chapa da caixa da gaveta (padrão 16 mm, previsto pela corrediça UM A30)." },
-    { p:"drawer.bottom_material", l:"Material fundo gaveta", t:"material",
-      h:"Chapa do fundo da gaveta (fina, encaixada em rasgo nas quatro paredes)." },
-    { p:"drawer.bottom_t", l:"Espessura fundo", t:"num", u:"mm",
-      h:"Grossura do fundo da gaveta, em mm (~6 mm)." },
-    { p:"drawer.face_material", l:"Material frente", t:"material",
-      h:"Chapa da frente da gaveta (fitada nos quatro lados)." },
-    { p:"drawer.face_t", l:"Espessura frente", t:"num", u:"mm",
-      h:"Grossura da frente da gaveta, em mm (~18 mm)." },
-  ]},
-  { title:"Dobradiça (avançado)", open:false, diagram:"hinge", fields:[
-    { p:"hinge.cup_diameter", l:"Diâmetro do caneco", t:"num", u:"mm",
-      h:"Diâmetro do furo do caneco na porta (padrão 35 mm)." },
-    { p:"hinge.cup_depth", l:"Profund. do caneco", t:"num", u:"mm",
-      h:"Profundidade do furo cego do caneco, em mm." },
-    { p:"hinge.cup_edge", l:"Borda até centro", t:"num", u:"mm",
-      h:"Distância da borda da porta ao centro do caneco, em mm." },
-    { p:"hinge.end_inset", l:"Recuo das pontas", t:"num", u:"mm",
-      h:"Distância das pontas da porta à primeira/última dobradiça, em mm." },
-    { p:"hinge.shelf_clearance", l:"Folga da prateleira", t:"num", u:"mm",
-      h:"Distância mínima entre uma dobradiça e uma prateleira; conflitos são reposicionados automaticamente." },
-  ]},
-  { title:"Tolerâncias (avançado)", open:false, diagram:"tol", fields:[
-    { p:"tol.dado_bottom_clearance", l:"Folga fundo do rasgo", t:"num", u:"mm",
-      h:"Folga extra no fundo do rasgo (dado) para o painel encaixar sem forçar, em mm." },
-    { p:"tol.dado_side_clearance", l:"Folga lateral do rasgo", t:"num", u:"mm",
-      h:"Folga extra nas laterais do rasgo (largura da ranhura vs. espessura do painel), em mm." },
-    { p:"tol.shelf_back_gap", l:"Folga prat.-fundo", t:"num", u:"mm",
-      h:"Espaço deixado entre a traseira da prateleira e o painel de fundo, em mm." },
-    { p:"tol.shelf_front_setback", l:"Recuo da prateleira", t:"num", u:"mm",
-      h:"Recuo base da prateleira em relação à frente do corpo, em mm (quando não alinhada à frente)." },
-    { p:"tol.shelf_door_clearance", l:"Folga prat.-porta", t:"num", u:"mm",
-      h:"Folga entre a prateleira e uma porta fechada, para a porta não encostar, em mm." },
-  ]},
-];
-
-var inputs = [];   // {p, t, el} for save-time collection
-
-/* ---- rendering ----------------------------------------------------------- */
+/* ---- materials table ----------------------------------------------------- */
 function el(tag, attrs, kids){
   var e = document.createElement(tag);
   if (attrs) for (var k in attrs){ if (k==="class") e.className=attrs[k]; else e.setAttribute(k, attrs[k]); }
   (kids||[]).forEach(function(c){ e.appendChild(typeof c==="string"?document.createTextNode(c):c); });
   return e;
 }
-
-function materialOptions(current){
-  var names = state.materials.map(function(m){ return m.name; });
-  if (current && names.indexOf(current) < 0) names = [current].concat(names);
-  return names;
-}
-
-function makeSelect(options){   // options: [{v,l}] or [string]
-  var s = el("select");
-  options.forEach(function(o){
-    var v = (typeof o==="object") ? o.v : o;
-    var l = (typeof o==="object") ? o.l : o;
-    var op = el("option"); op.value = v; op.textContent = l; s.appendChild(op);
-  });
-  return s;
-}
-
-function makeField(f){
-  var val = getPath(state.cfg, f.p);
-  var control;
-  if (f.t === "bool"){
-    var wrap = el("span", {class:"sw"});
-    var cb = el("input", {type:"checkbox"}); cb.checked = !!val;
-    wrap.appendChild(cb); wrap.appendChild(el("span", {class:"track"}));
-    inputs.push({p:f.p, t:f.t, el:cb});
-    return rowWith(f.l, wrap, f.h);
-  }
-  if (f.t === "material"){
-    control = makeSelect(materialOptions(val)); control.value = (val==null?"":val);
-    inputs.push({p:f.p, t:"text", el:control});
-    return rowWith(f.l, growWrap(control), f.h);
-  }
-  if (f.t === "slide"){
-    control = makeSelect(state.slides.map(function(s){ return {v:s.key, l:s.desc}; }));
-    control.value = (val==null?"":val);
-    inputs.push({p:f.p, t:"text", el:control});
-    return rowWith(f.l, growWrap(control), f.h);
-  }
-  if (f.t === "fita"){
-    control = makeSelect(state.fita_choices.map(function(c){ return {v:c.value, l:c.label}; }));
-    control.value = (val==null?"":val);
-    inputs.push({p:f.p, t:"text", el:control});
-    return rowWith(f.l, growWrap(control), f.h);
-  }
-  if (f.t === "sel"){
-    control = makeSelect((f.opts||[]).map(function(o){ return {v:o[0], l:o[1]}; }));
-    control.value = (val==null?"":val);
-    inputs.push({p:f.p, t:"text", el:control});
-    return rowWith(f.l, growWrap(control), f.h);
-  }
-  if (f.t === "text"){
-    control = el("input", {type:"text"}); control.value = (val==null?"":val);
-    inputs.push({p:f.p, t:"text", el:control});
-    return rowWith(f.l, growWrap(control), f.h);
-  }
-  // num / int
-  control = el("input", {type:"number", step:(f.t==="int"?"1":"any")});
-  control.value = (val==null?"":val);
-  inputs.push({p:f.p, t:f.t, el:control});
-  var fld = el("div", {class:"field" + (f.u?" has-unit":"")}, [control]);
-  if (f.u) fld.appendChild(el("span", {class:"unit"}, [f.u]));
-  return rowWith(f.l, fld, f.h);
-}
-
-function growWrap(c){ c.className = (c.className?c.className+" ":"")+"grow"; return c; }
-function infoIcon(tip){
-  return el("span", {class:"info", tabindex:"0", role:"note",
-                     "aria-label":tip, "data-tip":tip}, ["i"]);
-}
-function rowWith(label, control, tip){
-  var lab = el("label", {}, [label]);
-  if (tip) lab.appendChild(infoIcon(tip));
-  return el("div", {class:"row"}, [ lab, control ]);
-}
-
-function renderForm(){
-  inputs = [];
-  var host = document.getElementById("form");
-  host.innerHTML = "";
-  SECTIONS.forEach(function(sec){
-    var sbody = el("div", {class:"sbody"});
-    sec.fields.forEach(function(f){ var r = makeField(f); if (f.rowId) r.id = f.rowId; sbody.appendChild(r); });
-    if (sec.diagram === "joinery"){
-      // Illustrative front-elevation schematic (same drawing as the New/Editar
-      // Armário dialog + Layout palette), reflecting the fields below.
-      var jnHint = el("p", {class:"hint"}, [
-        "Como a lateral encontra a base e o tampo. Alinhada com base: base/tampo " +
-        "entre as laterais (laterais inteiras). Sobre base: base/tampo em toda a " +
-        "largura, com a lateral apoiada sobre/sob o painel."]);
-      sbody.insertBefore(buildJoineryDiagram(), sbody.firstChild);
-      sbody.insertBefore(jnHint, sbody.firstChild);
-    } else if (sec.diagram === "back"){
-      // Back-panel schematic — swaps between the groove and overlay variants to
-      // match the "Fixação do fundo" field, so the picture tracks the choice.
-      var bhost = el("div", {id:"backDiagramHost"});
-      bhost.appendChild(buildDiagram(backDiagramName()));
-      sbody.insertBefore(bhost, sbody.firstChild);
-    } else if (sec.diagram){
-      // Static reference schematic + measurement legend for the section.
-      sbody.insertBefore(buildDiagram(sec.diagram), sbody.firstChild);
-    }
-    var chev = el("span", {class:"chev"}, ["›"]);
-    var head = el("button", {class:"shead", type:"button"}, [ el("span", {}, [sec.title]), chev ]);
-    var section = el("div", {class:"section" + (sec.open?" open":"")}, [head, sbody]);
-    head.addEventListener("click", function(){ section.classList.toggle("open"); });
-    host.appendChild(section);
-  });
-  wireJoineryDiagram();
-  wireBackDiagram();
-  wireArremateMode();
-}
-
-/* ---- Back-panel schematic (groove vs overlay) ---------------------------- */
-function backDiagramName(){
-  var e = inputEl("back_mode");
-  var v = e ? e.value : getPath(state.cfg, "back_mode");
-  return (v === "overlay") ? "back_overlay" : "back";
-}
-function renderBackDiagram(){
-  var host = document.getElementById("backDiagramHost");
-  if (host){ host.innerHTML = ""; host.appendChild(buildDiagram(backDiagramName())); }
-  // The recuo + rasgo depth fields only apply to an encaixado (groove) back.
-  var overlay = (backDiagramName()==="back_overlay");
-  ["rowDadoDepth","rowBackSetback"].forEach(function(id){
-    var row = document.getElementById(id); if (row) row.style.display = overlay ? "none" : "";
-  });
-}
-function wireBackDiagram(){
-  var e = inputEl("back_mode");
-  if (e) e.addEventListener("change", renderBackDiagram);
-  renderBackDiagram();   // initial sync (variant + hide groove-only rows)
-}
-
-/* ---- Arremate: sanefa measurement mode (gap vs ceiling height) ----------- */
-function renderArremateMode(){
-  var e = inputEl("arremate.top_gap_mode");
-  var ceiling = (e ? e.value : getPath(state.cfg, "arremate.top_gap_mode")) === "ceiling";
-  var g = document.getElementById("rowArrTopGap");
-  var c = document.getElementById("rowArrCeiling");
-  if (g) g.style.display = ceiling ? "none" : "";
-  if (c) c.style.display = ceiling ? "" : "none";
-}
-function wireArremateMode(){
-  var e = inputEl("arremate.top_gap_mode");
-  if (e) e.addEventListener("change", renderArremateMode);
-  renderArremateMode();   // initial sync (show only the field for the current mode)
-}
-
-/* ---- Fixação lateral schematic ------------------------------------------- */
-function inputEl(p){
-  for (var i=0;i<inputs.length;i++) if (inputs[i].p===p) return inputs[i].el;
-  return null;
-}
-
-function buildJoineryDiagram(){
-  var wrap = el("div", {class:"jn-wrap"});
-  wrap.innerHTML =
-    '<svg class="jn-svg" id="jnSvg" viewBox="0 0 240 300" xmlns="http://www.w3.org/2000/svg">'
-    + '<rect id="jnTop"  class="jn-panel" x="46" y="18"  width="148" height="20"/>'
-    + '<rect id="jnBase" class="jn-panel" x="46" y="216" width="148" height="20"/>'
-    + '<rect id="jnKick" class="jn-kick"  x="30" y="236" width="180" height="46"/>'
-    + '<rect id="jnSideL" class="jn-side" x="30"  y="18" width="16" height="218"/>'
-    + '<rect id="jnSideR" class="jn-side" x="194" y="18" width="16" height="218"/>'
-    + '<line id="jnFloor" class="jn-floor" x1="14" y1="284" x2="226" y2="284"/>'
-    + '<text class="jn-lbl" x="120" y="33">Tampo</text>'
-    + '<text class="jn-lbl" x="120" y="231">Base</text>'
-    + '<text id="jnKickLbl" class="jn-lbl" x="120" y="264">Rodapé</text>'
-    + '</svg>'
-    // overhang numbers overlaid on the drawing at each junction (edit direct on the drawing)
-    + '<div class="jn-oh" id="jnTopOhBox" style="left:15%; top:12.5%;">'
-    +   '<input type="number" id="jnTopOh" step="1" min="0" title="Tampo: avanço da lateral"'
-    +   ' data-tip="Avanço (mm): quanto a lateral avança sobre o tampo. 0 = apoia sobre/sob o painel; = espessura = faceada com a face externa. Só vale em “Sobre base”.">'
-    +   '<span class="unit">mm</span></div>'
-    + '<div class="jn-oh" id="jnBotOhBox" style="left:15%; top:75%;">'
-    +   '<input type="number" id="jnBotOh" step="1" min="0" title="Base: avanço da lateral"'
-    +   ' data-tip="Avanço (mm): quanto a lateral avança sobre a base. 0 = apoia sobre o painel; = espessura = faceada com a face externa. Só vale em “Sobre base”.">'
-    +   '<span class="unit">mm</span></div>';
-  // Seed the overlay inputs from cfg and register them so they save like any
-  // other field (they replace the Base/Tampo "avanço" rows).
-  var topOh = wrap.querySelector("#jnTopOh"), botOh = wrap.querySelector("#jnBotOh");
-  var tv = getPath(state.cfg, "joinery.top_overhang");
-  var bv = getPath(state.cfg, "joinery.bottom_overhang");
-  topOh.value = (tv==null?0:tv); botOh.value = (bv==null?0:bv);
-  inputs.push({p:"joinery.top_overhang",    t:"num", el:topOh});
-  inputs.push({p:"joinery.bottom_overhang", t:"num", el:botOh});
-  return wrap;
-}
-
-function wireJoineryDiagram(){
-  ["t","with_toe_kick","joinery.bottom_mode","joinery.top_mode",
-   "joinery.bottom_overhang","joinery.top_overhang","joinery.sides_to_floor"]
-   .forEach(function(p){
-     var e = inputEl(p); if(!e) return;
-     e.addEventListener("change", renderJoineryDiagram);
-     e.addEventListener("input",  renderJoineryDiagram);
-   });
-  renderJoineryDiagram();
-}
-
-/* Redraw the schematic from the current joinery fields (mirrors the pure
-   renderJoineryDiagram in layout_editor.html). Non-editable here — the values
-   come from the form fields below the drawing. */
-function renderJoineryDiagram(){
-  var svg = document.getElementById("jnSvg"); if(!svg) return;
-  var tEl = inputEl("t");
-  var t = (tEl ? parseFloat(tEl.value) : parseFloat(getPath(state.cfg,"t"))) || 18;
-  var kEl = inputEl("with_toe_kick");
-  var hasKick = kEl ? !!kEl.checked : (getPath(state.cfg,"with_toe_kick") !== false);
-  var bMode = (inputEl("joinery.bottom_mode")||{}).value || "aligned";
-  var tMode = (inputEl("joinery.top_mode")||{}).value || "aligned";
-  var bOh = parseFloat((inputEl("joinery.bottom_overhang")||{}).value) || 0;
-  var tOh = parseFloat((inputEl("joinery.top_overhang")||{}).value) || 0;
-  var s2fEl = inputEl("joinery.sides_to_floor");
-  var s2f = (s2fEl ? !!s2fEl.checked : false) && hasKick;
-  var X0=30, X1=210, SW=16, TH=20;                 // frame + panel thickness (svg units)
-  var TF=18, topBottomY=TF+TH;                     // top panel: face y .. bottom y
-  var baseBotY=236, baseTopY=baseBotY-TH;          // base panel top/bottom y
-  var floorY=284, kickTopY=baseBotY;               // toe-kick zone
-  function travel(oh){ return Math.max(0, Math.min(oh/t, 1.8))*TH; }  // side reach past inner face
-  var topX = (tMode==="over")?X0:(X0+SW), topW = (tMode==="over")?(X1-X0):(X1-X0-2*SW);
-  var baseX= (bMode==="over")?X0:(X0+SW), baseW= (bMode==="over")?(X1-X0):(X1-X0-2*SW);
-  var sideTopY = (tMode==="over")?(topBottomY-travel(tOh)):TF;
-  var sideBotY = s2f ? floorY : ((bMode==="over")?(baseTopY+travel(bOh)):baseBotY);
-  function setR(id,x,y,w,h){ var r=document.getElementById(id); if(r){ r.setAttribute("x",x); r.setAttribute("y",y);
-    r.setAttribute("width",Math.max(0,w)); r.setAttribute("height",Math.max(0,h)); } }
-  function show(id,on){ var e=document.getElementById(id); if(e) e.style.display = on?"":"none"; }
-  setR("jnTop", topX, TF, topW, TH);
-  setR("jnBase", baseX, baseTopY, baseW, TH);
-  setR("jnSideL", X0, sideTopY, SW, sideBotY-sideTopY);
-  setR("jnSideR", X1-SW, sideTopY, SW, sideBotY-sideTopY);
-  show("jnKick", hasKick); show("jnFloor", hasKick); show("jnKickLbl", hasKick);
-  if (hasKick){
-    var kx = s2f ? (X0+SW) : X0, kw = s2f ? (X1-X0-2*SW) : (X1-X0);
-    setR("jnKick", kx, kickTopY, kw, floorY-kickTopY);
-  }
-  // overhang boxes only matter for 'sobre base' — dim + disable them otherwise
-  var tb=document.getElementById("jnTopOhBox"); if(tb) tb.classList.toggle("off", tMode!=="over");
-  var bb=document.getElementById("jnBotOhBox"); if(bb) bb.classList.toggle("off", bMode!=="over");
-}
-
-/* ---- per-section reference diagrams -------------------------------------- */
-/* Small SVG schematics with dimension callouts, one per section, so each
-   measurement field has a picture of what it refers to. Static/illustrative
-   (unlike the interactive Fixação lateral drawing). Built from string SVG +
-   the _ah/_dimH/_dimV dimension-line helpers below. */
-function _ah(x,y,d){                     // arrowhead, tip at (x,y), pointing l/r/u/d
-  var s=5, w=2.6;
-  if (d==="l") return '<polygon class="ar" points="'+x+','+y+' '+(x+s)+','+(y-w)+' '+(x+s)+','+(y+w)+'"/>';
-  if (d==="r") return '<polygon class="ar" points="'+x+','+y+' '+(x-s)+','+(y-w)+' '+(x-s)+','+(y+w)+'"/>';
-  if (d==="u") return '<polygon class="ar" points="'+x+','+y+' '+(x-w)+','+(y+s)+' '+(x+w)+','+(y+s)+'"/>';
-  return         '<polygon class="ar" points="'+x+','+y+' '+(x-w)+','+(y-s)+' '+(x+w)+','+(y-s)+'"/>';
-}
-function _dimH(x0,x1,y,t){                // horizontal dimension line, label above midpoint
-  return '<line class="dim" x1="'+x0+'" y1="'+y+'" x2="'+x1+'" y2="'+y+'"/>'
-       + _ah(x0,y,"l") + _ah(x1,y,"r")
-       + '<text class="lbl" x="'+((x0+x1)/2)+'" y="'+(y-4)+'">'+t+'</text>';
-}
-function _dimV(x,y0,y1,t){                // vertical dimension line, rotated label
-  var my=(y0+y1)/2;
-  return '<line class="dim" x1="'+x+'" y1="'+y0+'" x2="'+x+'" y2="'+y1+'"/>'
-       + _ah(x,y0,"u") + _ah(x,y1,"d")
-       + '<text class="lbl" x="'+x+'" y="'+my+'" transform="rotate(-90 '+x+' '+my+')">'+t+'</text>';
-}
-function _lead(x0,y0,x1,y1,t,tx,ty){      // leader line ending in an arrow + free label
-  return '<line class="dim" x1="'+x0+'" y1="'+y0+'" x2="'+x1+'" y2="'+y1+'"/>'
-       + _ah(x1,y1,(Math.abs(x1-x0)>Math.abs(y1-y0))?(x1>x0?"r":"l"):(y1>y0?"d":"u"))
-       + '<text class="lbl" x="'+tx+'" y="'+ty+'">'+t+'</text>';
-}
-
-var DIAGRAMS = {
-  /* Overall carcass box: W × H × D and carcass thickness t. */
-  dims:{ vb:"0 0 260 215", cap:
-    "W largura · H altura · D profundidade · t = espessura da carcaça (laterais, base e tampo).",
-    svg:
-      '<polygon class="pnl2" points="40,64 76,36 226,36 190,64"/>'
-    + '<polygon class="pnl2" points="190,64 226,36 226,156 190,184"/>'
-    + '<rect class="pnl"  x="40"  y="64" width="150" height="120"/>'
-    + '<rect class="open" x="52"  y="76" width="126" height="96"/>'
-    + _dimH(40,190,202,"W")
-    + _dimV(26,64,184,"H")
-    // depth edge, D labelled just past the top-right tip (clear of t)
-    + '<line class="dim" x1="190" y1="64" x2="226" y2="36"/>'
-    + '<text class="lbl" x="233" y="40">D</text>'
-    // carcass thickness t: witness-tick dimension across the top border (top-left)
-    + '<line class="dim" x1="76" y1="64" x2="76" y2="76"/>'
-    + '<line class="dim" x1="71" y1="64" x2="81" y2="64"/>'
-    + '<line class="dim" x1="71" y1="76" x2="81" y2="76"/>'
-    + '<text class="lbl" x="95" y="73">t</text>'
-  },
-
-  /* Panel face with the four taped edges (C1/C2 long, L1/L2 short). */
-  fita:{ vb:"0 0 260 172", cap:
-    "C1/C2 = bordas de comprimento (as maiores) · L1/L2 = bordas de largura (as menores). "
-    + "Fita fina = 0,4 mm · fita grossa = 1,0 mm.",
-    svg:
-      '<rect class="pnl" x="60" y="44" width="140" height="84"/>'
-    + '<rect class="tape"  x="60"  y="44"  width="140" height="5"/>'
-    + '<rect class="tape"  x="60"  y="123" width="140" height="5"/>'
-    + '<rect class="tape2" x="60"  y="44"  width="5"   height="84"/>'
-    + '<rect class="tape2" x="195" y="44"  width="5"   height="84"/>'
-    + '<text class="lbl" x="130" y="38">C1</text>'
-    + '<text class="lbl" x="130" y="146">C2</text>'
-    + '<text class="lbl" x="50"  y="86" transform="rotate(-90 50 86)">L1</text>'
-    + '<text class="lbl" x="210" y="86" transform="rotate(-90 210 86)">L2</text>'
-  },
-
-  /* Rear-corner detail — GROOVE (encaixado): back seated in a dado in the side. */
-  back:{ vb:"0 0 260 180", cap:
-    "Encaixado: o fundo assenta num rasgo (dado) nas laterais/base/tampo. "
-    + "Espessura do fundo (back_t), profundidade do rasgo e recuo do fundo.",
-    svg:
-      '<rect class="pnl"  x="60"  y="28"  width="16"  height="122"/>'   // side panel (front top, rear bottom)
-    + '<rect class="pnl2" x="68"  y="116" width="142" height="14"/>'    // back panel
-    + '<rect class="pnl2" x="68"  y="116" width="8"   height="14"/>'    // seated into groove
-    + '<text class="lbl-m" x="45" y="45" transform="rotate(-90 45 45)">lateral</text>'
-    + '<text class="lbl-m" x="150" y="112">fundo</text>'
-    + _dimV(228,116,150,"recuo")                                        // rear face → back panel
-    + '<line class="dim" x1="210" y1="116" x2="228" y2="116"/>'
-    + '<line class="dim" x1="210" y1="150" x2="228" y2="150"/>'
-    + _lead(150,168,150,131,"esp. fundo",150,166)
-    + _lead(96,100,72,116,"rasgo",100,96)
-  },
-
-  /* Rear-corner detail — OVERLAY (sobreposto): back applied to the rear face of
-     the carcass, full width, no groove. */
-  back_overlay:{ vb:"0 0 260 180", cap:
-    "Sobreposto: o fundo é aplicado (aparafusado) na face traseira do corpo, em "
-    + "toda a largura, encostado nas bordas traseiras e sem rasgo. Só a espessura importa.",
-    svg:
-      '<rect class="pnl"  x="60"  y="30"  width="16"  height="104"/>'   // side panel, rear edge at y=134
-    + '<rect class="pnl2" x="60"  y="134" width="150" height="16"/>'    // back applied across the rear, extends behind
-    + '<text class="lbl-m" x="45" y="48" transform="rotate(-90 45 48)">lateral</text>'
-    + '<text class="lbl-m" x="150" y="146">fundo</text>'
-    + _lead(96,112,70,134,"aplicado atrás",100,108)
-    + _dimV(226,134,150,"esp.")
-    + '<line class="dim" x1="210" y1="134" x2="226" y2="134"/>'
-    + '<line class="dim" x1="210" y1="150" x2="226" y2="150"/>'
-  },
-
-  /* Side elevation: toe kick under the carcass (front to the right). */
-  kick:{ vb:"0 0 260 200", cap:
-    "Altura e recuo (da frente do armário) do rodapé, e espessura da tábua frontal. "
-    + "Vão máx. sem reforço limita o comprimento antes de reforçar.",
-    svg:
-      '<rect class="pnl"  x="40" y="40"  width="180" height="70"/>'     // carcass body
-    + '<rect class="pnl2" x="184" y="110" width="10" height="60"/>'     // kick front board
-    + '<line class="floor" x1="26" y1="170" x2="234" y2="170"/>'
-    + '<text class="lbl-m" x="120" y="80">armário</text>'
-    + '<text class="lbl-m" x="55"  y="184">piso</text>'
-    + _dimV(240,110,170,"altura")
-    + _dimH(194,220,184,"recuo")
-    + _lead(189,124,189,112,"esp.",189,120)
-  },
-
-  /* Front elevation: the applied finishing panels sit OUTSIDE the carcass (left /
-     right / top), so the external envelope grows; plus a side section showing how
-     far they jut out at the front. */
-  tamponamento:{ vb:"0 0 260 280", cap:
-    "Painéis aplicados por fora do corpo: cada lado ligado aumenta a largura em uma "
-    + "espessura e o superior aumenta a altura. As laterais vão do piso ao topo; o "
-    + "superior cobre toda a largura acabada. Avanço frontal = quanto o painel avança "
-    + "à frente (0 = faceado); a traseira fica sempre alinhada com o fundo.",
-    svg:
-    // front elevation — carcass wrapped by the three applied panels
-      '<rect class="pnl"  x="62"  y="46" width="136" height="122"/>'
-    + '<rect class="pnl2" x="50"  y="46" width="12"  height="122"/>'   // esquerdo
-    + '<rect class="pnl2" x="198" y="46" width="12"  height="122"/>'   // direito
-    + '<rect class="pnl2" x="50"  y="34" width="160" height="12"/>'    // superior
-    + '<line class="floor" x1="26" y1="168" x2="234" y2="168"/>'
-    + '<text class="lbl-m" x="130" y="28">tamponamento superior</text>'
-    + '<text class="lbl-m" x="130" y="112">corpo</text>'
-    + '<text class="lbl-m" x="42" y="112" transform="rotate(-90 42 112)">tamponamento</text>'
-    + '<line class="dim" x1="50" y1="170" x2="50" y2="186"/>'
-    + '<line class="dim" x1="62" y1="170" x2="62" y2="186"/>'
-    + _dimH(50,62,186,"esp.")
-    + '<line class="dim" x1="212" y1="34" x2="234" y2="34"/>'
-    + '<line class="dim" x1="212" y1="46" x2="234" y2="46"/>'
-    + _dimV(234,34,46,"esp.")
-    // top view — panel runs the full depth and juts out past the front
-    + '<text class="lbl-m" x="130" y="201">vista de cima — avanço frontal</text>'
-    + '<line class="dim" x1="74" y1="222" x2="74" y2="250"/>'
-    + '<line class="dim" x1="92" y1="222" x2="92" y2="228"/>'
-    + _dimH(74,92,222,"avanço")
-    + '<rect class="pnl"  x="92" y="228" width="118" height="22"/>'
-    + '<rect class="pnl2" x="74" y="250" width="136" height="10"/>'
-    + '<text class="lbl-m" x="151" y="242">corpo</text>'
-    + '<text class="lbl-m" x="64" y="239" transform="rotate(-90 64 239)">frente</text>'
-    + '<text class="lbl-m" x="140" y="274">traseira alinhada com o fundo</text>'
-  },
-
-  /* Front elevation: the top valance (sanefa) closing the gap to the ceiling and
-     the side scribe strips (réguas) closing the gap to the walls — all applied
-     OUTSIDE the carcass; plus a top view of the U-shaped sanefa. */
-  arremate:{ vb:"0 0 260 304", cap:
-    "Sanefa: peça frontal do topo do armário até o teto — altura = folga até o teto "
-    + "(ou altura do teto − H). Réguas: peças frontais laterais com a largura da folga "
-    + "até a parede, do piso ao teto. Sanefa em U acrescenta um retorno de profundidade "
-    + "total sobre cada lateral. Todas cortadas com sobra e ajustadas no local.",
-    svg:
-    // room envelope: ceiling, floor and the two side walls
-      '<line class="floor" x1="24" y1="30"  x2="236" y2="30"/>'
-    + '<line class="floor" x1="24" y1="210" x2="236" y2="210"/>'
-    + '<line class="floor" x1="44"  y1="22" x2="44"  y2="218"/>'
-    + '<line class="floor" x1="216" y1="22" x2="216" y2="218"/>'
-    + '<rect class="pnl"  x="62"  y="74" width="136" height="136"/>'   // armário
-    + '<rect class="pnl2" x="62"  y="30" width="136" height="44"/>'    // sanefa
-    + '<rect class="pnl2" x="44"  y="30" width="18"  height="180"/>'   // régua esq.
-    + '<rect class="pnl2" x="198" y="30" width="18"  height="180"/>'   // régua dir.
-    + '<text class="lbl-m" x="32"  y="24">teto</text>'
-    + '<text class="lbl-m" x="200" y="224">piso</text>'
-    + '<text class="lbl-m" x="100" y="58">sanefa</text>'
-    + '<text class="lbl-m" x="130" y="145">armário</text>'
-    + '<text class="lbl-m" x="53"  y="140" transform="rotate(-90 53 140)">régua</text>'
-    + '<text class="lbl-m" x="207" y="140" transform="rotate(-90 207 140)">régua</text>'
-    + '<text class="lbl-m" x="32"  y="120" transform="rotate(-90 32 120)">parede</text>'
-    + '<text class="lbl-m" x="228" y="120" transform="rotate(-90 228 120)">parede</text>'
-    + _dimV(162,30,74,"folga teto")
-    + '<line class="dim" x1="44" y1="212" x2="44" y2="226"/>'
-    + '<line class="dim" x1="62" y1="212" x2="62" y2="226"/>'
-    + _dimH(44,62,226,"folga parede")
-    // top view — the sanefa closed into a U by a return over each side
-    + '<text class="lbl-m" x="130" y="252">sanefa em U — vista de cima</text>'
-    + '<rect class="open" x="76"  y="262" width="108" height="34" stroke-dasharray="4 3"/>'
-    + '<rect class="pnl2" x="76"  y="262" width="10"  height="34"/>'
-    + '<rect class="pnl2" x="174" y="262" width="10"  height="34"/>'
-    + '<rect class="pnl2" x="86"  y="288" width="88"  height="8"/>'
-    + '<text class="lbl-m" x="70"  y="279" transform="rotate(-90 70 279)">retorno</text>'
-    + '<text class="lbl-m" x="190" y="279" transform="rotate(-90 190 279)">retorno</text>'
-    + '<text class="lbl-m" x="130" y="282">frente</text>'
-    + _lead(206,272,170,292,"esp.",210,268)
-  },
-
-  /* Front elevation: two overlay doors with the reveal gap. */
-  doors:{ vb:"0 0 260 200", cap:
-    "N portas iguais · folga = reveal entre as portas e nas bordas · espessura (door_t). "
-    + "Sobreposta cobre a frente; embutida assenta no vão.",
-    svg:
-      '<rect class="pnl"  x="40" y="24" width="180" height="150"/>'
-    + '<rect class="pnl2" x="46" y="30" width="82"  height="138"/>'
-    + '<rect class="pnl2" x="132" y="30" width="82" height="138"/>'
-    + _lead(130,10,130,30,"folga",130,8)
-    + _lead(236,100,214,100,"folga",244,103)
-    + '<text class="lbl-m" x="87"  y="103">porta</text>'
-    + '<text class="lbl-m" x="173" y="103">porta</text>'
-  },
-
-  /* Front elevation of a 3-drawer stack + the box hidden behind a face. */
-  drawers:{ vb:"0 0 260 200", cap:
-    "N gavetas empilhadas · folga = reveal entre as frentes · frente (face_t), "
-    + "caixa (box_t) e fundo da gaveta (bottom_t). A corrediça ocupa um espaço de cada "
-    + "lado (lateral ~12,5–12,7 mm · oculta ~6,5 mm): caixa = vão livre − 2× esse espaço.",
-    svg:
-      '<rect class="pnl"  x="40" y="20" width="180" height="160"/>'
-    + '<rect class="pnl2" x="46" y="26" width="168" height="46"/>'
-    + '<rect class="pnl2" x="46" y="76" width="168" height="46"/>'
-    + '<rect class="pnl2" x="46" y="126" width="168" height="46"/>'
-    + '<rect x="70" y="82" width="120" height="34" fill="none" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 3"/>'
-    + '<text class="lbl-m" x="130" y="102">caixa</text>'
-    + _dimH(46,70,119,"corrediça")
-    + _lead(232,97,214,97,"folga",240,100)
-  },
-
-  /* Door back face with concealed-hinge cup bores + an edge section. */
-  hinge:{ vb:"0 0 260 200", cap:
-    "Caneco: diâmetro (Ø) e profundidade · distância borda→centro · recuo das pontas. "
-    + "O nº de dobradiças cresce com a altura da porta.",
-    svg:
-      '<rect class="pnl" x="70" y="20" width="120" height="160"/>'      // door back face
-    + '<circle class="pnl2" cx="100" cy="60"  r="14"/>'
-    + '<circle class="pnl2" cx="100" cy="140" r="14"/>'
-    + _dimH(86,114,50,"Ø")
-    + _dimH(70,100,192,"borda→centro")
-    + _dimV(54,20,60,"recuo")
-    + '<rect class="pnl" x="212" y="44" width="20" height="90"/>'       // edge section
-    + '<rect class="open" x="212" y="80" width="12" height="18"/>'      // cup depth
-    + _dimH(212,224,110,"prof.")
-    + '<text class="lbl-m" x="130" y="16">face interna da porta</text>'
-  },
-
-  /* Side section: a shelf between the back panel and a closed door. */
-  tol:{ vb:"0 0 260 195", cap:
-    "Recuo da prateleira (frente), folga prat.–fundo (atrás) e folga prat.–porta. "
-    + "Folgas do rasgo (fundo/lateral) afinam o encaixe do fundo.",
-    svg:
-      '<rect class="pnl"  x="30"  y="24" width="200" height="150"/>'
-    + '<rect class="pnl2" x="38"  y="24" width="10"  height="150"/>'    // back panel (rear/left)
-    + '<rect class="pnl2" x="212" y="30" width="10"  height="138"/>'    // door (front/right)
-    + '<rect class="open" x="64"  y="94" width="132" height="12"/>'     // shelf
-    + '<text class="lbl-m" x="43"  y="120" transform="rotate(-90 43 120)">fundo</text>'
-    + '<text class="lbl-m" x="130" y="88">prateleira</text>'
-    + '<text class="lbl-m" x="217" y="120" transform="rotate(-90 217 120)">porta</text>'
-    + _dimH(48,64,130,"atrás")
-    + _dimH(196,212,130,"frente")
-  },
-};
-
-function buildDiagram(name){
-  var frag = document.createDocumentFragment();
-  var d = DIAGRAMS[name]; if (!d) return frag;
-  var wrap = el("div", {class:"dg-wrap"});
-  wrap.innerHTML = '<svg class="dg-svg" viewBox="'+d.vb+'" xmlns="http://www.w3.org/2000/svg">'+d.svg+'</svg>';
-  frag.appendChild(wrap);
-  if (d.cap){ var c = el("p", {class:"dg-cap"}); c.textContent = d.cap; frag.appendChild(c); }
-  return frag;
-}
-
-/* ---- materials table ----------------------------------------------------- */
 function renderMaterials(){
   var body = document.getElementById("matBody");
   body.innerHTML = "";
@@ -1057,23 +218,6 @@ function renderMaterials(){
       el("td", {class:"thk"}, [thk]),
       el("td", {class:"del"}, [del]),
     ]));
-  });
-}
-
-/* Re-render the form so material dropdowns reflect the edited table, keeping
-   the current form values. */
-function refreshMaterialSelects(){ collectForm(); renderForm(); }
-
-/* ---- collect current form values back into state.cfg --------------------- */
-function collectForm(){
-  inputs.forEach(function(inp){
-    var v;
-    if (inp.t === "bool") v = inp.el.checked;
-    else if (inp.t === "int") v = parseInt(inp.el.value, 10);
-    else if (inp.t === "num") v = parseFloat(inp.el.value);
-    else v = inp.el.value;
-    if ((inp.t === "int" || inp.t === "num") && isNaN(v)) return;  // leave prior value
-    setPath(state.cfg, inp.p, v);
   });
 }
 

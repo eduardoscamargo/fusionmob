@@ -1,0 +1,167 @@
+/* =============================================================================
+   FusionMob — SHARED palette styling (Fusion 360-inspired dark theme)
+   -----------------------------------------------------------------------------
+   Everything the shared configuration form (cabinet_config.js) renders is styled
+   here, so a tweak to a row, a switch, a section, a reference diagram or a help
+   tooltip lands on BOTH palettes at once:
+
+     * preferences.html   (Preferências)
+     * layout_editor.html (Editor de Armário)
+
+   Each page keeps only its own chrome in its <style> block (the materials table
+   and profile bar in Preferences; the region canvas, wizard and action bar in
+   the layout editor). See resources/ui/CLAUDE.md.
+============================================================================= */
+
+:root {
+  --bg:#2b2b2b; --bg-2:#323232; --panel:#3a3a3a; --panel-2:#434343;
+  --line:#242424; --line-2:#4d4d4d;
+  --ink:#e8e8e8; --muted:#9a9a9a; --faint:#777;
+  --accent:#0696d7; --accent-2:#29b6e8; --accent-ink:#fff;
+  --ok:#6cc04a; --warn:#e6a23c; --err:#ec5b56;
+  --radius:6px;
+}
+* { box-sizing:border-box; }
+html,body { height:100%; }
+body { margin:0; font:13px/1.45 "Segoe UI",Roboto,Arial,sans-serif; color:var(--ink);
+       background:var(--bg); -webkit-font-smoothing:antialiased; }
+h1,h2,h3,h4 { margin:0; font-weight:600; }
+button { font-family:inherit; }
+::-webkit-scrollbar { width:10px; height:10px; }
+::-webkit-scrollbar-thumb { background:#555; border-radius:6px; border:2px solid var(--bg); }
+::-webkit-scrollbar-track { background:transparent; }
+
+/* ---- shell ---- */
+.app { display:flex; flex-direction:column; height:100vh; }
+.topbar { display:flex; align-items:center; gap:8px; padding:8px 12px;
+          background:linear-gradient(180deg,#3d3d3d,#333); border-bottom:1px solid var(--line);
+          flex:0 0 auto; }
+.brand { display:flex; align-items:center; gap:8px; margin-right:auto; }
+.brand .logo { width:22px; height:22px; border-radius:5px; flex:0 0 auto;
+               background:linear-gradient(135deg,var(--accent),#0b6ea8);
+               display:flex; align-items:center; justify-content:center; color:#fff;
+               font-weight:700; font-size:13px; }
+.brand .logo svg { width:14px; height:14px; }
+.brand .title { font-size:13px; font-weight:600; letter-spacing:.02em; }
+.brand .sub { font-size:10px; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; }
+.scroll { flex:1 1 auto; overflow-y:auto; overflow-x:hidden; padding:12px; }
+
+/* ---- cards & collapsible sections ---- */
+.card { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+        margin:0 0 12px; overflow:hidden; }
+.card > .head { display:flex; align-items:center; gap:8px; padding:10px 12px;
+                font-size:12px; font-weight:600; letter-spacing:.03em; }
+.card > .head .ic { color:var(--accent-2); display:flex; }
+.card > .body { padding:4px 12px 12px; }
+
+.section { border:1px solid var(--line); border-radius:var(--radius); margin:0 0 10px;
+           background:var(--bg-2); overflow:hidden; }
+.section > .shead { display:flex; align-items:center; gap:8px; width:100%; cursor:pointer;
+                    padding:11px 12px; background:none; border:0; color:var(--ink);
+                    font-size:12px; font-weight:600; text-align:left; letter-spacing:.02em; }
+.section > .shead:hover { background:var(--panel); }
+.section > .shead .chev { margin-left:auto; transition:transform .15s ease; color:var(--muted); }
+.section > .sbody { padding:2px 12px 12px; display:none; }
+.section.open > .sbody { display:block; }
+.section.open > .shead .chev { transform:rotate(90deg); }
+.section .tag { font-size:10px; color:var(--faint); font-weight:400; text-transform:none;
+                letter-spacing:0; }
+
+/* ---- form rows ---- */
+.row { display:flex; align-items:center; gap:8px; margin:8px 0; }
+.row > label { flex:0 0 150px; color:var(--muted); font-size:12px;
+               display:inline-flex; align-items:center; }
+.row .grow { flex:1 1 auto; min-width:0; }
+.hint { color:var(--faint); font-size:11px; margin:2px 0 10px; }
+.subhead { font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+           color:var(--faint); margin:14px 0 4px; }
+
+input[type=number], input[type=text], select {
+  width:100%; padding:6px 8px; border:1px solid var(--line-2); border-radius:5px;
+  background:#2c2c2c; color:var(--ink); font-size:12px; outline:none; }
+input[type=number]:focus, input[type=text]:focus, select:focus {
+  border-color:var(--accent); box-shadow:0 0 0 2px rgba(6,150,215,.25); }
+input:disabled, select:disabled { opacity:.55; cursor:default; }
+select { cursor:pointer; }
+
+/* number field with a unit suffix */
+.field { position:relative; flex:1 1 auto; }
+.field .unit { position:absolute; right:8px; top:50%; transform:translateY(-50%);
+               font-size:10px; color:var(--faint); pointer-events:none; }
+.field.has-unit input { padding-right:26px; }
+
+/* switch (checkbox) */
+.sw { position:relative; display:inline-block; width:38px; height:20px; flex:0 0 auto; }
+.sw input { position:absolute; inset:0; width:100%; height:100%; margin:0;
+            opacity:0; cursor:pointer; z-index:2; }
+.sw .track { position:absolute; inset:0; background:#555; border-radius:20px;
+             transition:.15s; cursor:pointer; }
+.sw .track:before { content:""; position:absolute; width:16px; height:16px; left:2px; top:2px;
+                    background:#ddd; border-radius:50%; transition:.15s; }
+.sw input:checked + .track { background:var(--accent); }
+.sw input:checked + .track:before { transform:translateX(18px); background:#fff; }
+.sw input:disabled + .track { opacity:.45; cursor:default; }
+
+/* ---- buttons ---- */
+.btns { display:flex; flex-wrap:wrap; gap:8px; }
+.btn { padding:7px 12px; border:1px solid var(--line-2); border-radius:5px;
+       background:#454545; color:var(--ink); cursor:pointer; font-size:12px; font-weight:500;
+       display:inline-flex; align-items:center; gap:6px; }
+.btn:hover { background:#525252; border-color:#666; }
+.btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+.btn.primary:hover { background:var(--accent-2); }
+.btn.ghost { background:transparent; }
+.btn.danger { background:#6a2f2c; border-color:#8a3b37; }
+.btn.danger:hover { background:#7d3733; }
+.btn:disabled { opacity:.45; cursor:default; }
+.btn.sm { padding:5px 9px; font-size:11px; }
+.btn svg { width:14px; height:14px; }
+
+/* ---- Fixação lateral: live, editable front-elevation schematic ---- */
+.jn-wrap { position:relative; width:100%; max-width:280px; margin:6px auto 10px; }
+.jn-svg { width:100%; height:auto; display:block; }
+.jn-svg .jn-panel { fill:var(--bg-2); stroke:#888; stroke-width:1.5; }
+.jn-svg .jn-side  { fill:#5b6b78; stroke:#8fa6b6; stroke-width:1.5; }
+.jn-svg .jn-kick  { fill:#3c4650; stroke:#6b7885; stroke-width:1.5; }
+.jn-svg .jn-floor { stroke:#9aa7b2; stroke-width:2; stroke-dasharray:6 5; }
+.jn-svg .jn-lbl   { fill:var(--muted); font-size:11px; text-anchor:middle; }
+.jn-oh { position:absolute; transform:translate(-50%,-50%);
+         display:flex; align-items:center; gap:2px; background:var(--bg-2);
+         border:1px solid var(--accent); border-radius:6px; padding:2px 4px;
+         box-shadow:0 1px 4px rgba(0,0,0,.35); }
+.jn-oh input { width:42px; background:transparent; border:0; color:var(--ink);
+               font-size:12px; text-align:right; outline:none; }
+.jn-oh .unit { font-size:10px; color:var(--muted); }
+.jn-oh.off { opacity:.35; pointer-events:none; }
+
+/* ---- per-section reference diagrams (static schematics with callouts) ---- */
+.dg-wrap { width:100%; max-width:250px; margin:4px auto; }
+.dg-svg { width:100%; height:auto; display:block; }
+.dg-svg .pnl  { fill:var(--bg-2); stroke:#8a8a8a; stroke-width:1.5; }
+.dg-svg .pnl2 { fill:#3c4650; stroke:#6b7885; stroke-width:1.5; }
+.dg-svg .open { fill:var(--bg); stroke:#8a8a8a; stroke-width:1.2; }
+.dg-svg .tape { fill:var(--accent); }
+.dg-svg .tape2{ fill:var(--accent-2); }
+.dg-svg .floor{ stroke:#9aa7b2; stroke-width:2; stroke-dasharray:6 5; }
+.dg-svg .dim  { stroke:var(--accent); stroke-width:1; fill:none; }
+.dg-svg .ar   { fill:var(--accent); }
+.dg-svg .lbl  { fill:var(--ink);  font-size:10px; text-anchor:middle;
+                font-family:"Segoe UI",Roboto,Arial,sans-serif; }
+.dg-svg .lbl-m{ fill:var(--muted); font-size:9px;  text-anchor:middle;
+                font-family:"Segoe UI",Roboto,Arial,sans-serif; }
+.dg-cap { max-width:250px; margin:0 auto 10px; color:var(--faint);
+          font-size:10.5px; line-height:1.4; text-align:center; }
+
+/* ---- inline help: an "i" badge + a floating tooltip rendered on <body> ---- */
+.info { display:inline-flex; align-items:center; justify-content:center;
+        width:14px; height:14px; margin-left:5px; flex:0 0 auto; cursor:help;
+        border:1px solid var(--line-2); border-radius:50%; color:var(--muted);
+        font:italic 700 9px Georgia,"Times New Roman",serif; user-select:none;
+        vertical-align:middle; transition:.12s; }
+.info:hover, .info:focus { border-color:var(--accent); color:var(--accent-2); outline:none; }
+.tip { position:fixed; z-index:9999; max-width:260px; padding:7px 9px;
+       background:#1e1e1e; color:var(--ink); border:1px solid var(--line-2);
+       border-radius:6px; font-size:11px; line-height:1.4; text-align:left;
+       box-shadow:0 4px 14px rgba(0,0,0,.5); pointer-events:none;
+       opacity:0; transition:opacity .12s; }
+.tip.show { opacity:1; }

@@ -25,7 +25,7 @@ import math
 
 # Add-in version (keep in sync with FusionMob.manifest). Bump the patch digit
 # (last number) on every modification — see CLAUDE.md "Versioning".
-__version__ = '1.18.0'
+__version__ = '1.19.0'
 
 app = None
 ui = None
@@ -3172,12 +3172,24 @@ def add_cabinet_inputs(inputs, cfg):
         box_mat.listItems.add(name, name == dr_cfg['box_material'])
     if not box_mat.selectedItem:
         box_mat.listItems.item(0).isSelected = True
+    dw.addValueInput('drawerBoxThickness', 'Espessura da caixa', 'mm',
+                     adsk.core.ValueInput.createByReal(dr_cfg['box_t'] / 10.0))
+    bot_mat = dw.addDropDownCommandInput(
+        'drawerBottomMaterial', 'Material do fundo', adsk.core.DropDownStyles.TextListDropDownStyle)
+    for (name, _thk) in get_materials():
+        bot_mat.listItems.add(name, name == dr_cfg['bottom_material'])
+    if not bot_mat.selectedItem:
+        bot_mat.listItems.item(0).isSelected = True
+    dw.addValueInput('drawerBottomThickness', 'Espessura do fundo', 'mm',
+                     adsk.core.ValueInput.createByReal(dr_cfg['bottom_t'] / 10.0))
     face_mat = dw.addDropDownCommandInput(
         'drawerFaceMaterial', 'Material da frente', adsk.core.DropDownStyles.TextListDropDownStyle)
     for (name, _thk) in get_materials():
         face_mat.listItems.add(name, name == dr_cfg['face_material'])
     if not face_mat.selectedItem:
         face_mat.listItems.item(0).isSelected = True
+    dw.addValueInput('drawerFaceThickness', 'Espessura da frente', 'mm',
+                     adsk.core.ValueInput.createByReal(dr_cfg['face_t'] / 10.0))
     dw.addBoolValueInput('insertRealHardware', 'Inserir modelo 3D da corredica',
                          True, '', bool(cfg['insert_real_hardware']))
     # Slide mounting measurements. Read-only readout of the chosen corredica until
@@ -3391,12 +3403,17 @@ def read_cabinet_inputs(inputs):
         'drawer_gap': inputs.itemById('drawerGap').value * 10.0,
         'slide_key': _slide_key_from_label(inputs.itemById('slideKey').selectedItem.name),
         'insert_real_hardware': inputs.itemById('insertRealHardware').value,
-        # Start from the DRAWER defaults so the un-exposed box/bottom specs are
-        # kept, then override the materials shown in the dialog. (The drawer face
-        # band now comes from the shared 'fita' block, not a per-drawer field.)
+        # Start from the DRAWER defaults so the un-exposed box specs (bottom dado,
+        # box height, top gap) are kept, then override what the dialog shows.
+        # (The drawer face band now comes from the shared 'fita' block, not a
+        # per-drawer field.)
         'drawer': dict(DRAWER, **{
             'box_material': inputs.itemById('drawerBoxMaterial').selectedItem.name,
+            'box_t': inputs.itemById('drawerBoxThickness').value * 10.0,
+            'bottom_material': inputs.itemById('drawerBottomMaterial').selectedItem.name,
+            'bottom_t': inputs.itemById('drawerBottomThickness').value * 10.0,
             'face_material': inputs.itemById('drawerFaceMaterial').selectedItem.name,
+            'face_t': inputs.itemById('drawerFaceThickness').value * 10.0,
         }),
         # Slide measurements. Always stored; only honoured while 'custom' is on
         # (otherwise the library spec for slide_key wins — see resolve_slide_spec).
@@ -3490,7 +3507,11 @@ def write_cabinet_inputs(inputs, cfg):
     inputs.itemById('drawerGap').value = cfg['drawer_gap'] / 10.0
     dr_cfg = cfg['drawer']
     _select_dropdown(inputs.itemById('drawerBoxMaterial'), dr_cfg['box_material'])
+    inputs.itemById('drawerBoxThickness').value = dr_cfg['box_t'] / 10.0
+    _select_dropdown(inputs.itemById('drawerBottomMaterial'), dr_cfg['bottom_material'])
+    inputs.itemById('drawerBottomThickness').value = dr_cfg['bottom_t'] / 10.0
     _select_dropdown(inputs.itemById('drawerFaceMaterial'), dr_cfg['face_material'])
+    inputs.itemById('drawerFaceThickness').value = dr_cfg['face_t'] / 10.0
     inputs.itemById('insertRealHardware').value = bool(cfg['insert_real_hardware'])
     inputs.itemById('slideCustom').value = bool(cfg['slide']['custom'])
     sl_vals = slide_ui_values(cfg)
@@ -4392,6 +4413,9 @@ def _palette_state(design):
         'cabinets': _cabinet_list(design) if design else [],
         'materials': [name for name, _thk in get_materials()],
         'slides': slide_specs_for_ui(),
+        # Same option list the Preferences palette gets: both render their
+        # configuration form from resources/ui/cabinet_config.js.
+        'fita_choices': [{'value': v, 'label': lbl} for v, lbl in FITA_CHOICES],
     }
 
 
