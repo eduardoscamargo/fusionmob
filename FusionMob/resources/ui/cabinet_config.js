@@ -41,6 +41,7 @@ var FMCFG = (function () {
   var JOINERY_CHOICES = [["aligned", "Alinhada com base"], ["over", "Sobre base"]];
   var BACK_MODE_CHOICES = [["groove", "Encaixado (ranhura)"], ["overlay", "Sobreposto (atrás)"]];
   var ARREMATE_MODE_CHOICES = [["gap", "Informar folga"], ["ceiling", "Informar altura do teto"]];
+  var PUXADOR_SIDE_CHOICES = [["bottom", "Embaixo (aba inferior)"], ["top", "Em cima (aba superior)"]];
   var INHERIT_LABEL = "(mesmo do corpo)";
 
   /* ===========================================================================
@@ -276,6 +277,32 @@ var FMCFG = (function () {
         { id: "arrMaterial", p: "arremate.material", l: "Material", t: "material_inherit",
           h: "Chapa das peças de arremate. Escolha “" + INHERIT_LABEL + "” para herdar o " +
              "material da carcaça." }
+      ]
+    },
+
+    /* ------------------------------------------------------------- puxador -- */
+    {
+      key: "puxador", title: "Puxador integrado", tag: "— sem puxador, frente estendida",
+      diagram: "puxador",
+      hint: "Armário <b>sem puxador</b>: a frente é cortada mais comprida e passa da borda do " +
+            "armário, embaixo (sobre o recuo do rodapé) ou em cima. A <b>aba</b> que sobra é a " +
+            "pegada. Vale só para frentes <b>sobrepostas</b> que chegam à borda do armário — as " +
+            "frentes do meio de uma pilha não têm para onde avançar. O corpo e o interior não " +
+            "mudam.",
+      fields: [
+        { id: "pxEnabled", p: "puxador.enabled", l: "Sem puxador (frente estendida)", t: "bool",
+          h: "Dispensa o puxador: a frente é cortada mais comprida e passa da borda do armário; " +
+             "a aba que sobra é a pegada. Só vale para frentes sobrepostas que chegam à borda " +
+             "do armário." },
+        { id: "pxSide", p: "puxador.side", l: "Lado da pegada", t: "sel",
+          opts: PUXADOR_SIDE_CHOICES,
+          h: "De que lado a frente avança: embaixo (aba sobre o recuo do rodapé, pega-se por " +
+             "baixo) ou em cima (pega-se por cima)." },
+        { id: "pxSize", p: "puxador.size", l: "Altura da aba (pegada)", t: "num", u: "mm",
+          step: 5, min: 0,
+          h: "Quanto a frente avança além da borda do armário, em mm (~30–40 mm dá uma pegada " +
+             "confortável). Com rodapé, a aba inferior é limitada à altura do rodapé para não " +
+             "passar do piso." }
       ]
     },
 
@@ -609,6 +636,39 @@ var FMCFG = (function () {
       + '<text class="lbl-m" x="190" y="279" transform="rotate(-90 190 279)">retorno</text>'
       + '<text class="lbl-m" x="130" y="282">frente</text>'
       + _lead(206, 272, 170, 292, "esp.", 210, 268)
+    },
+
+    /* Side sections: the handleless front cut longer than the region so it hangs
+       past the cabinet edge — below (over the toe-kick recess) or above. The
+       protruding aba is the grip. */
+    puxador: { vb: "0 0 260 300", cap:
+      "Sem puxador: a frente é cortada mais comprida e passa da borda do armário — embaixo "
+      + "(sobre o recuo do rodapé) ou em cima. A aba que sobra é a pegada. Só em frentes "
+      + "sobrepostas que chegam à borda do armário; o corpo e o interior não mudam.",
+      svg:
+      /* (A) aba inferior — the front hangs down in front of the toe-kick recess */
+        '<text class="lbl-m" x="130" y="16">vista lateral — aba embaixo</text>'
+      + '<rect class="pnl"  x="76"  y="34"  width="128" height="78"/>'
+      + '<rect class="pnl2" x="108" y="112" width="10"  height="34"/>'
+      + '<line class="floor" x1="30" y1="146" x2="230" y2="146"/>'
+      + '<rect class="pnl2" x="64"  y="38"  width="12"  height="102"/>'
+      + '<text class="lbl-m" x="144" y="78">armário</text>'
+      + '<text class="lbl-m" x="57"  y="70" transform="rotate(-90 57 70)">frente</text>'
+      + '<text class="lbl-m" x="150" y="141">rodapé recuado</text>'
+      + '<text class="lbl-m" x="215" y="158">piso</text>'
+      + '<line class="dim" x1="64" y1="112" x2="40" y2="112"/>'
+      + '<line class="dim" x1="64" y1="140" x2="40" y2="140"/>'
+      + _dimV(40, 112, 140, "aba")
+      + _lead(124, 168, 80, 140, "pegada", 146, 172)
+      /* (B) aba superior — the same front, mirrored to the top edge */
+      + '<text class="lbl-m" x="130" y="186">aba em cima</text>'
+      + '<rect class="pnl"  x="76" y="214" width="128" height="78"/>'
+      + '<rect class="pnl2" x="64" y="194" width="12"  height="98"/>'
+      + '<text class="lbl-m" x="144" y="258">armário</text>'
+      + '<line class="dim" x1="64" y1="194" x2="40" y2="194"/>'
+      + '<line class="dim" x1="64" y1="214" x2="40" y2="214"/>'
+      + _dimV(40, 194, 214, "aba")
+      + _lead(162, 197, 82, 201, "pegada", 188, 194)
     },
 
     /* Front elevation: two overlay doors with the reveal gap. */
