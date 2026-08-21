@@ -83,6 +83,16 @@ essentials. Keep its labels and defaults matching the `SPEC` entry.
   arremate gap-vs-ceiling switch, the slide read-only readout and the live
   Fixação lateral drawing all live in `syncDynamics`, so both pages behave the
   same. Put new conditional behaviour there, not in a page.
+- **Search is derived from `SPEC`.** The property search bar on both palettes
+  (`FMCFG.searchMount` / `searchApply`, styled `.fmh-*`) builds its index from
+  `SPEC` alone, so a new field is searchable with no extra work — but its `l`
+  and `h` ARE the search corpus, so keep them meaningful. That module is also
+  the single owner of row/section visibility: it hides with the `.fmh-hide`
+  class and never touches inline `style.display` (which `syncDynamics` owns for
+  the mode-dependent rows). A page with its own gate declares it through
+  `FMCFG.setGatedSections(keys)` instead of hiding sections itself, so a search
+  hit can surface a gated section. Any page that re-renders the form must call
+  `FMCFG.searchApply()` afterwards, or an active filter is silently lost.
 - **Option lists come from Python** (`materials`, `slides`, `fita_choices` in the
   `init` payload of both `_palette_state` and `_prefs_state`). If you add a new
   list-backed field type, send the list from both.

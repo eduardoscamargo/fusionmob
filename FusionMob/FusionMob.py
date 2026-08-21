@@ -25,7 +25,7 @@ import math
 
 # Add-in version (keep in sync with FusionMob.manifest). Bump the patch digit
 # (last number) on every modification — see CLAUDE.md "Versioning".
-__version__ = '1.19.1'
+__version__ = '1.20.0'
 
 app = None
 ui = None

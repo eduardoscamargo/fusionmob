@@ -58,9 +58,15 @@ var FMCFG = (function () {
        u    unit suffix        h  tooltip text        opts  [[value,label],…]
        step/min  number-input attributes
        rowId     stable id for the row (so behaviour can show/hide it)
+       owner     ("note" only) the field this readout belongs to, so the search
+                 keeps the note when that field matches
        only      'prefs' | 'cabinet' — render on that surface only
        inDiagram true = the control lives inside the section's diagram, not in a
-                 row of its own (the two Fixação lateral overhangs)
+                 row of its own (the two Fixação lateral overhangs). Its `l` is
+                 never rendered — it exists so the search can find it by name.
+
+     `l` and `h` are also the search corpus (see SEARCH / FILTER below), so keep
+     them meaningful: a field is findable by whatever they say.
   =========================================================================== */
   var SPEC = [
     /* ---------------------------------------------------------------- dims -- */
@@ -173,9 +179,11 @@ var FMCFG = (function () {
             "lateral avança sobre o painel — edite direto no desenho.",
       fields: [
         { id: "joineryTopOverhang", p: "joinery.top_overhang", t: "num", inDiagram: true,
+          l: "Avanço sobre o tampo",
           h: "Avanço (mm): quanto a lateral avança sobre o tampo. 0 = apoia sob o painel; " +
              "= espessura = faceada com a face externa. Só vale em “Sobre base”." },
         { id: "joineryBottomOverhang", p: "joinery.bottom_overhang", t: "num", inDiagram: true,
+          l: "Avanço sobre a base",
           h: "Avanço (mm): quanto a lateral avança sobre a base. 0 = apoia sobre o painel; " +
              "= espessura = faceada com a face externa. Só vale em “Sobre base”." },
         { id: "joineryTopMode", p: "joinery.top_mode", l: "Base superior (tampo)", t: "sel",
@@ -252,7 +260,7 @@ var FMCFG = (function () {
           t: "num", u: "mm", step: 1, min: 0, rowId: "rowArrCeiling",
           h: "Altura total do ambiente do piso até o teto, em mm. A folga da sanefa é " +
              "calculada como esta altura menos a altura (A) do armário." },
-        { id: "arrCeilingCalc", t: "note" },
+        { id: "arrCeilingCalc", t: "note", owner: "arrCeilingHeight" },
         { id: "arrTopInline", p: "arremate.top_inline_fronts", l: "Sanefa faceada com as frentes",
           t: "bool",
           h: "Com portas/gavetas sobrepostas, a sanefa acompanha o plano das frentes em vez de " +
@@ -359,7 +367,7 @@ var FMCFG = (function () {
           h: "Modelo de corrediça da biblioteca de ferragens. Define quanto espaço a corrediça " +
              "ocupa (lateral: roldana/telescópica; oculta: sob a gaveta), a profundidade da " +
              "caixa e a profundidade mínima do armário." },
-        { id: "slideInfo", t: "note" },
+        { id: "slideInfo", t: "note", owner: "slide_key" },
         { id: "slide_custom", p: "slide.custom", l: "Personalizar medidas da corrediça",
           t: "bool",
           h: "Ligado: as cinco medidas abaixo valem para este armário e sobrepõem a biblioteca " +
@@ -842,9 +850,11 @@ var FMCFG = (function () {
     return s;
   }
   function rowWith(f, control) {
-    var lab = el("label", {}, [f.l || ""]);
+    // The label text lives in its own <span class="lbl"> so the search filter can
+    // highlight it without ever touching the .info badge (and its data-tip).
+    var lab = el("label", {}, [el("span", { class: "lbl" }, [f.l || ""])]);
     if (f.h) lab.appendChild(makeInfo(f.h));
-    var row = el("div", { class: "row" }, [lab, control]);
+    var row = el("div", { class: "row", "data-fmid": f.id }, [lab, control]);
     if (f.rowId) row.id = f.rowId;
     return row;
   }
@@ -925,7 +935,7 @@ var FMCFG = (function () {
         return;
       }
       var head = el("button", { class: "shead", type: "button", "data-toggle": sectionDomId(key) },
-                    [el("span", {}, [sec.title])]);
+                    [el("span", { class: "stitle" }, [sec.title])]);
       if (sec.tag) head.appendChild(el("span", { class: "tag" }, [sec.tag]));
       head.appendChild(chevron());
       var isOpen = openKeys ? (openKeys.indexOf(key) >= 0) : !!sec.open;
@@ -1112,6 +1122,11 @@ var FMCFG = (function () {
     renderArremateMode();
     syncSlideFields(ctx);
     renderJoineryDiagram();
+    // Last: the calls above may have just shown or hidden a row inline, so an
+    // active filter has to be re-asserted over the new truth (and writeForm ends
+    // here, which is what makes a re-rendered form pick the filter back up).
+    // No-op when the search box is empty.
+    applyVisibility();
   }
 
   /* Attach listeners to every rendered control. `ctx.onChange(id)` fires after
@@ -1166,6 +1181,334 @@ var FMCFG = (function () {
     if (e && !e.getAttribute("data-tip")) e.setAttribute("data-tip", text);
   }
 
+  /* ===========================================================================
+     SEARCH / FILTER — find a property by name, help text or section
+     ---------------------------------------------------------------------------
+     Derived entirely from SPEC, so a field added there becomes searchable with
+     no extra work. This is also the SINGLE OWNER of row/section visibility: the
+     search filter and the layout editor's "Configuração avançada" gate both
+     compose here, and neither ever writes an inline style.display — that belongs
+     to syncDynamics (the mode-dependent rows). A row the dynamics hid inline
+     therefore stays hidden even if it matches, which is what we want: a row that
+     does not apply to the current mode should not be reachable by search.
+  =========================================================================== */
+  var HIDE = "fmh-hide";
+
+  /* Portuguese accent folding, one char -> one char so match offsets still line
+     up with the original text (that is what lets us highlight the real label). */
+  var FOLD = {
+    "á": "a", "à": "a", "â": "a", "ã": "a", "ä": "a", "å": "a",
+    "é": "e", "è": "e", "ê": "e", "ë": "e", "í": "i", "ì": "i", "î": "i", "ï": "i",
+    "ó": "o", "ò": "o", "ô": "o", "õ": "o", "ö": "o", "ú": "u", "ù": "u", "û": "u", "ü": "u",
+    "ç": "c", "ñ": "n",
+    "“": '"', "”": '"', "‘": "'", "’": "'", "—": "-", "–": "-"
+  };
+  function normText(s) {
+    return String(s == null ? "" : s).toLowerCase()
+      .replace(/[^\u0000-\u007f]/g, function (c) { return FOLD[c] || c; });
+  }
+  function queryTerms(q) {
+    return normText(q).split(/\s+/).filter(function (t) { return !!t; });
+  }
+  /* Every term must appear somewhere in the haystack (AND), so "folga teto"
+     finds "Folga até o teto" across the words in between. */
+  function hitsAll(hay, ts) {
+    for (var i = 0; i < ts.length; i++) if (hay.indexOf(ts[i]) < 0) return false;
+    return true;
+  }
+
+  var SEARCH = {
+    bar: null, input: null, count: null, clear: null, note: null, empty: null,
+    surface: "prefs", keys: null, onFilter: null,
+    index: null, titles: null, tags: null, q: "", gated: [], openSnap: null,
+    plainHosts: null
+  };
+
+  function searchKeys() { return SEARCH.keys || SPEC.map(function (s) { return s.key; }); }
+
+  /* One index entry per section and per RENDERED field of the surface: the
+     only:'prefs' fields produce no DOM on the cabinet surface, so indexing them
+     there would offer a result that points at nothing. */
+  function buildSearchIndex() {
+    var out = [];
+    SEARCH.titles = {}; SEARCH.tags = {};
+    searchKeys().forEach(function (key) {
+      var sec = sectionByKey(key); if (!sec) return;
+      SEARCH.titles[key] = sec.title || "";
+      SEARCH.tags[key] = sec.tag || "";
+      var hint = normText(String(sec.hint || "").replace(/<[^>]*>/g, " "));
+      out.push({ kind: "section", sectionKey: key,
+                 hay: normText((sec.title || "") + " " + (sec.tag || "")) + " " + hint });
+      sec.fields.forEach(function (f) {
+        if (!isFor(f, SEARCH.surface)) return;
+        if (f.t === "note") {      // a live readout: shown when its owner matches
+          out.push({ kind: "note", sectionKey: key, id: f.id, owner: f.owner || null });
+          return;
+        }
+        out.push({ kind: "field", sectionKey: key, id: f.id,
+                   host: f.inDiagram ? "jn" : "row",    // the overhangs live in the SVG
+                   label: f.l || "",
+                   labelHay: normText(f.l || ""), helpHay: normText(f.h || ""),
+                   hay: normText((f.l || "") + " " + (f.h || "")) });
+      });
+    });
+    return out;
+  }
+  function searchIndex() {
+    if (!SEARCH.index) SEARCH.index = buildSearchIndex();
+    return SEARCH.index;
+  }
+
+  function rowFor(entry) {
+    if (entry.host === "jn") return document.querySelector(".jn-wrap");
+    return document.querySelector('.row[data-fmid="' + entry.id + '"]');
+  }
+
+  /* Highlight inside the dedicated .lbl / .stitle span only — rewriting the whole
+     <label> would destroy the .info badge and its data-tip. */
+  function highlightIn(host, text, ts) {
+    var norm = normText(text), spans = [];
+    ts.forEach(function (t) {
+      var from = 0, at;
+      while ((at = norm.indexOf(t, from)) >= 0) { spans.push([at, at + t.length]); from = at + t.length; }
+    });
+    if (!spans.length) { unhighlight(host, text); return; }
+    spans.sort(function (a, b) { return a[0] - b[0]; });
+    var merged = [];
+    spans.forEach(function (sp) {
+      var last = merged[merged.length - 1];
+      if (last && sp[0] <= last[1]) { if (sp[1] > last[1]) last[1] = sp[1]; }
+      else merged.push([sp[0], sp[1]]);
+    });
+    host.textContent = "";
+    var pos = 0;
+    merged.forEach(function (sp) {
+      if (sp[0] > pos) host.appendChild(document.createTextNode(text.slice(pos, sp[0])));
+      host.appendChild(el("mark", { class: "fmh-mark" }, [text.slice(sp[0], sp[1])]));
+      pos = sp[1];
+    });
+    if (pos < text.length) host.appendChild(document.createTextNode(text.slice(pos)));
+  }
+  function unhighlight(host, text) {
+    if (host.childNodes.length === 1 && host.firstChild.nodeType === 3
+        && host.firstChild.nodeValue === text) return;
+    host.textContent = text;
+  }
+
+  /* Match-count pill in the section header. */
+  function sectionBadge(sec, n) {
+    var head = sec.querySelector(".shead"); if (!head) return;
+    var b = head.querySelector(".fmh-badge");
+    if (!n) { if (b) b.parentNode.removeChild(b); return; }
+    if (!b) { b = el("span", { class: "fmh-badge" }); head.insertBefore(b, head.querySelector(".chev")); }
+    b.textContent = String(n);
+  }
+  /* On a partial match keep only the matching rows: the section hint, schematic
+     and runtime notes describe the whole section, so they would just be noise. */
+  function scaffoldChildren(body, whole) {
+    if (!body) return;
+    var kids = body.children;
+    for (var i = 0; i < kids.length; i++) {
+      if (!kids[i].classList.contains("row")) kids[i].classList.toggle(HIDE, !whole);
+    }
+  }
+
+  function snapshotOpen() {
+    var m = {};
+    searchKeys().forEach(function (key) {
+      var sec = byId(sectionDomId(key)); if (sec) m[key] = sec.classList.contains("open");
+    });
+    return m;
+  }
+  function restoreOpen() {
+    if (!SEARCH.openSnap) return;
+    for (var key in SEARCH.openSnap) {
+      var sec = byId(sectionDomId(key));
+      if (sec) sec.classList.toggle("open", !!SEARCH.openSnap[key]);
+    }
+    SEARCH.openSnap = null;
+  }
+
+  /* THE recompute: search filter + advanced gate, one pass, classes only. */
+  function applyVisibility() {
+    var ts = queryTerms(SEARCH.q), filtering = ts.length > 0;
+    var entries = searchIndex();
+    var secHit = {}, secCount = {}, total = 0, matched = 0, revealedGated = false;
+
+    // Pass 1 - decide, and resolve each field's row up front. The counts are
+    // deliberately about what the reader will actually SEE: a row syncDynamics
+    // hid inline (wrong mode for it) matches but stays hidden, so it must not be
+    // counted, or the readout would promise a row that never appears.
+    var hitById = {};
+    entries.forEach(function (e) {
+      if (e.kind === "section") { secHit[e.sectionKey] = !filtering || hitsAll(e.hay, ts); return; }
+      if (e.kind !== "field") return;
+      // a section-title hit shows the whole section: searching "arremate" means
+      // "show me that section", not "fields with arremate in the name"
+      e._hit = !filtering || secHit[e.sectionKey] || hitsAll(e.hay, ts);
+      e._viaHelp = filtering && e._hit && !secHit[e.sectionKey]
+                   && !hitsAll(e.labelHay, ts) && hitsAll(e.helpHay, ts);
+      e._row = rowFor(e);
+      if (!e._row) return;                          // never rendered on this surface
+      hitById[e.id] = e._hit;
+      if (e._row.style.display === "none") return;  // syncDynamics owns this one
+      total++;
+      if (e._hit) { matched++; secCount[e.sectionKey] = (secCount[e.sectionKey] || 0) + 1; }
+    });
+
+    var gatedOff = {};
+    (SEARCH.gated || []).forEach(function (k) { gatedOff[k] = true; });
+
+    searchKeys().forEach(function (key) {
+      var sec = byId(sectionDomId(key));
+      if (!sec) return;                    // e.g. "dims", rendered plain (no wrapper)
+      var show = filtering ? (!!secHit[key] || (secCount[key] || 0) > 0) : !gatedOff[key];
+      if (filtering && show && gatedOff[key]) revealedGated = true;
+      sec.classList.toggle(HIDE, !show);
+      if (filtering && show) sec.classList.add("open");
+      sectionBadge(sec, filtering && !secHit[key] ? (secCount[key] || 0) : 0);
+      scaffoldChildren(sec.querySelector(".sbody"), !filtering || !!secHit[key]);
+      var st = sec.querySelector(".shead > .stitle");
+      if (st) {
+        if (filtering && secHit[key]) highlightIn(st, SEARCH.titles[key], ts);
+        else unhighlight(st, SEARCH.titles[key]);
+      }
+      var tg = sec.querySelector(".shead > .tag");
+      if (tg) {
+        if (filtering && secHit[key]) highlightIn(tg, SEARCH.tags[key], ts);
+        else unhighlight(tg, SEARCH.tags[key]);
+      }
+    });
+
+    entries.forEach(function (e) {
+      if (e.kind !== "field") return;
+      var row = e._row; if (!row) return;
+      // both overhangs share one .jn-wrap, so only ever un-hide it
+      if (e.host === "jn") { if (e._hit) row.classList.remove(HIDE); return; }
+      row.classList.toggle(HIDE, !e._hit);
+      var info = row.querySelector(".info");
+      if (info) info.classList.toggle("fmh-viahelp", !!e._viaHelp);
+      var lbl = row.querySelector("label > .lbl");
+      if (lbl) {
+        if (filtering && e._hit) highlightIn(lbl, e.label, ts);
+        else unhighlight(lbl, e.label);
+      }
+    });
+
+    for (var pk in (SEARCH.plainHosts || {})) {
+      scaffoldChildren(byId(SEARCH.plainHosts[pk]), !filtering || !!secHit[pk]);
+    }
+
+    entries.forEach(function (e) {
+      if (e.kind !== "note") return;
+      var n = byId(e.id); if (!n) return;
+      if (filtering && !secHit[e.sectionKey] && e.owner && hitById[e.owner]) {
+        n.classList.remove(HIDE);       // its inline display still decides the rest
+      }
+    });
+
+    if (SEARCH.bar) SEARCH.bar.classList.toggle("active", filtering);
+    if (SEARCH.count) SEARCH.count.textContent = filtering ? (matched + " de " + total) : "";
+    if (SEARCH.clear) SEARCH.clear.classList.toggle("show", filtering);
+    if (SEARCH.note) SEARCH.note.classList.toggle("show", filtering && revealedGated);
+    if (SEARCH.empty) SEARCH.empty.classList.toggle("show", filtering && matched === 0);
+    if (SEARCH.onFilter) SEARCH.onFilter({ query: SEARCH.q, filtering: filtering,
+                                           matched: matched, total: total,
+                                           sections: secCount, secHit: secHit });
+  }
+
+  function setQuery(q) {
+    q = String(q == null ? "" : q);
+    var was = queryTerms(SEARCH.q).length > 0, now = queryTerms(q).length > 0;
+    if (!was && now) SEARCH.openSnap = snapshotOpen();  // so clearing restores the view
+    SEARCH.q = q;
+    if (was && !now) restoreOpen();
+    applyVisibility();
+  }
+  function clearSearch(blur) {
+    if (SEARCH.input) {
+      SEARCH.input.value = "";
+      if (blur) SEARCH.input.blur(); else SEARCH.input.focus();
+    }
+    setQuery("");
+  }
+
+  var SEARCH_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" '
+    + 'stroke="currentColor" stroke-width="2" stroke-linecap="round">'
+    + '<circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/></svg>';
+
+  /* Build the search bar into `host` (page chrome, OUTSIDE the render target —
+     render() wipes its host). opts:
+       { host, surface, sections, plainHosts, onFilter }
+     plainHosts maps a section key to the id of the host it was rendered into with
+     `plain:true` -- those rows have no .section wrapper, so this is how the shared
+     content around them still gets scaffolded. */
+  function searchMount(opts) {
+    opts = opts || {};
+    var host = opts.host; if (!host) return;
+    SEARCH.surface = opts.surface || "prefs";
+    SEARCH.keys = opts.sections || null;
+    SEARCH.plainHosts = opts.plainHosts || null;   // { sectionKey: hostElementId }
+    SEARCH.onFilter = opts.onFilter || null;
+    SEARCH.index = null;
+
+    var input = el("input", { type: "text", id: "fmhInput", class: "fmh-input",
+                              placeholder: "Buscar propriedade…", autocomplete: "off",
+                              spellcheck: "false",
+                              "data-tip": "Busca as propriedades desta tela pelo nome, pelo "
+                                        + "texto de ajuda ou pelo nome da seção. Sem acento e "
+                                        + "sem maiúscula também encontram; várias palavras "
+                                        + "somam (ex.: “folga teto”). Esc limpa." });
+    var ic = el("span", { class: "fmh-ic" }); ic.innerHTML = SEARCH_ICON;
+    var count = el("span", { class: "fmh-count" });
+    var clear = el("button", { type: "button", class: "fmh-clear",
+                               "data-tip": "Limpar a busca (Esc)" }, ["×"]);
+    var box = el("div", { class: "fmh-box" }, [ic, input, count, clear]);
+    var note = el("p", { class: "fmh-note" },
+                 ["Mostrando também seções de Configuração avançada."]);
+    var empty = el("p", { class: "fmh-empty" });
+    var bar = el("div", { class: "fmh-bar" }, [box, note, empty]);
+    host.innerHTML = "";
+    host.appendChild(bar);
+
+    SEARCH.bar = bar; SEARCH.input = input; SEARCH.count = count;
+    SEARCH.clear = clear; SEARCH.note = note; SEARCH.empty = empty;
+
+    input.addEventListener("input", function () {
+      empty.textContent = "Nenhuma propriedade encontrada para “" + input.value.trim() + "”.";
+      setQuery(input.value);
+    });
+    input.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" || ev.keyCode === 27) { ev.preventDefault(); clearSearch(true); return; }
+      // Enter turns the search into jump-to-field: type three letters, Enter,
+      // then type the value.
+      if (ev.key === "Enter" || ev.keyCode === 13) { ev.preventDefault(); focusFirstHit(); }
+    });
+    clear.addEventListener("click", function () { clearSearch(false); });
+    applyVisibility();
+  }
+
+  /* Move the caret to the first visible matching control. */
+  function focusFirstHit() {
+    var entries = searchIndex();
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      if (e.kind !== "field" || !e._hit || !e._row) continue;
+      if (e._row.classList.contains(HIDE) || !e._row.offsetParent) continue;
+      var c = byId(e.id) || e._row.querySelector("input, select");
+      if (c) { c.focus(); if (c.scrollIntoView) c.scrollIntoView({ block: "center" }); return; }
+    }
+  }
+
+  /* Re-apply the active filter after the form was re-rendered (render() wipes the
+     DOM, and Preferences re-renders on every save / reset / profile switch). */
+  function searchApply() { applyVisibility(); }
+  function searchQuery() { return SEARCH.q; }
+  /* The page declares which sections its own gate switched off (the layout
+     editor's "Configuração avançada"); composing it here is what lets a search
+     surface a match inside a gated section. */
+  function setGatedSections(keys) { SEARCH.gated = keys || []; applyVisibility(); }
+
   return {
     SPEC: SPEC, DIAGRAMS: DIAGRAMS, FITA_CHOICES: FITA_CHOICES, INHERIT_LABEL: INHERIT_LABEL,
     getPath: getPath, setPath: setPath,
@@ -1175,6 +1518,8 @@ var FMCFG = (function () {
     writeForm: writeForm, readForm: readForm, wire: wire,
     syncDynamics: syncDynamics, renderJoineryDiagram: renderJoineryDiagram,
     renderBackMode: renderBackMode, renderArremateMode: renderArremateMode,
-    initTooltips: initTooltips, setTip: setTip, makeInfo: makeInfo
+    initTooltips: initTooltips, setTip: setTip, makeInfo: makeInfo,
+    searchMount: searchMount, searchApply: searchApply, searchQuery: searchQuery,
+    setGatedSections: setGatedSections, normText: normText
   };
 })();

@@ -165,3 +165,37 @@ select { cursor:pointer; }
        box-shadow:0 4px 14px rgba(0,0,0,.5); pointer-events:none;
        opacity:0; transition:opacity .12s; }
 .tip.show { opacity:1; }
+
+/* ---- busca de propriedades: barra, filtro e destaque ---------------------- */
+/* The filter hides with a class (never an inline style.display) so it cannot
+   fight syncDynamics, which owns the inline display of the mode-dependent rows. */
+.fmh-hide { display:none !important; }
+
+.fmh-bar { flex:0 0 auto; padding:8px 12px; background:var(--bg-2);
+           border-bottom:1px solid var(--line); }
+.fmh-box { display:flex; align-items:center; gap:6px; padding:0 8px; background:#2c2c2c;
+           border:1px solid var(--line-2); border-radius:5px; }
+.fmh-box:focus-within { border-color:var(--accent); box-shadow:0 0 0 2px rgba(6,150,215,.25); }
+.fmh-bar.active .fmh-box { border-color:var(--accent); }
+.fmh-ic { display:flex; flex:0 0 auto; color:var(--muted); }
+.fmh-input { flex:1 1 auto; min-width:0; width:auto; padding:6px 0; border:0;
+             background:transparent; color:var(--ink); font-size:12px; }
+.fmh-input:focus { border:0; box-shadow:none; }
+.fmh-count { flex:0 0 auto; font-size:10px; color:var(--faint); white-space:nowrap; }
+.fmh-clear { display:none; flex:0 0 auto; width:18px; height:18px; padding:0; border:0;
+             border-radius:50%; background:transparent; color:var(--muted);
+             font-size:15px; line-height:1; cursor:pointer; }
+.fmh-clear.show { display:block; }
+.fmh-clear:hover { background:var(--panel-2); color:var(--ink); }
+.fmh-note, .fmh-empty { display:none; margin:6px 0 0; font-size:11px; }
+.fmh-note.show, .fmh-empty.show { display:block; }
+.fmh-note { color:var(--accent-2); }
+.fmh-empty { color:var(--warn); }
+
+/* per-section match count, and the matched text itself */
+.fmh-badge { flex:0 0 auto; min-width:16px; padding:1px 5px; border-radius:9px;
+             background:var(--accent); color:var(--accent-ink); font-size:9.5px;
+             font-weight:700; text-align:center; }
+.fmh-mark { background:rgba(6,150,215,.32); color:var(--ink); border-radius:2px; padding:0 1px; }
+/* the row matched only through its tooltip: point the reader at the "i" */
+.info.fmh-viahelp { border-color:var(--accent); color:var(--accent-2); }

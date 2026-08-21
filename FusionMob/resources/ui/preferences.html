@@ -52,11 +52,16 @@
     </div>
   </div>
 
+  <!-- Busca de propriedades — a barra inteira é montada pelo FMCFG
+       (compartilhada com o Editor de Armário); aqui só fica o ponto de montagem,
+       fora do host de render (render() limpa o innerHTML do host). -->
+  <div id="searchHost"></div>
+
   <div class="scroll">
     <div class="card">
       <div class="head">Perfil de configuração</div>
       <div class="body">
-        <div class="hint">Cada perfil é uma variação completa da configuração —
+        <div class="hint" id="profHint">Cada perfil é uma variação completa da configuração —
           biblioteca de materiais + padrões do armário. Troque de perfil para
           alternar entre padrões da marcenaria, de um cliente ou de uma obra.
           Alterações não salvas são gravadas no perfil atual ao trocar.</div>
@@ -64,19 +69,19 @@
           <label>Perfil ativo<span class="info" tabindex="0" data-tip="Perfil usado por Novo/Editar Armário e pelo editor de Layout como ponto de partida. Configurações já salvas em cada armário não mudam.">i</span></label>
           <select id="profileSel" class="grow"></select>
         </div>
-        <div class="btns">
+        <div class="btns" id="profBtns">
           <button class="btn sm" id="profNew" type="button">+ Novo</button>
           <button class="btn sm" id="profDup" type="button">Duplicar</button>
           <button class="btn sm" id="profRename" type="button">Renomear</button>
           <button class="btn sm danger" id="profDel" type="button">Excluir</button>
         </div>
-        <div class="sep"></div>
-        <div class="btns">
+        <div class="sep" id="profSep"></div>
+        <div class="btns" id="profIoBtns">
           <button class="btn sm" id="exportBtn" type="button">↑ Exportar perfil…</button>
           <button class="btn sm" id="exportAllBtn" type="button">↑ Exportar todos…</button>
           <button class="btn sm" id="importBtn" type="button">↓ Importar…</button>
         </div>
-        <div class="hint" style="margin-top:8px">Exportar grava um arquivo .json com o
+        <div class="hint" style="margin-top:8px" id="profIoHint">Exportar grava um arquivo .json com o
           que está na tela; importar adiciona os perfis do arquivo (nunca sobrescreve —
           nomes repetidos ganham sufixo).</div>
 
@@ -94,7 +99,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="cardMats">
       <div class="head">Materiais (chapas)</div>
       <div class="body">
         <div class="hint">Sua biblioteca de chapas. Aparece em todos os menus de material.
@@ -128,7 +133,7 @@
     <div class="card">
       <div class="head">Padrões do armário</div>
       <div class="body">
-        <div class="hint">Valores iniciais de cada novo armário. Você ainda pode alterar
+        <div class="hint" id="defaultsHint">Valores iniciais de cada novo armário. Você ainda pode alterar
           tudo por armário nos comandos Novo/Editar Armário e Layout — as mesmas
           seções aparecem lá, já preenchidas com o que estiver aqui.</div>
         <!-- Rendered from the shared spec (cabinet_config.js) — never hand-write
@@ -164,6 +169,23 @@ function send(action, obj){
 
 FMCFG.initTooltips();
 
+/* Busca de propriedades. All of it lives in the shared module; this only names
+   the surface and hides the page's own chrome while a query is active. The
+   Perfil card deliberately stays visible — you must never lose track of which
+   profile's defaults you are editing. */
+FMCFG.searchMount({
+  host: document.getElementById("searchHost"),
+  surface: "prefs",
+  onFilter: function(r){
+    // Reclaim the screen for the results, but never hide WHICH profile is being
+    // edited -- the "Perfil ativo" row and its card heading stay put.
+    ["cardMats","profHint","profBtns","profSep","profIoBtns","profIoHint","defaultsHint"]
+      .forEach(function(id){
+        document.getElementById(id).classList.toggle("fmh-hide", r.filtering);
+      });
+  }
+});
+
 var state = { cfg:{}, materials:[], slides:[], fita_choices:[], factory:null,
               profiles:[], active:"" };
 
@@ -186,6 +208,7 @@ function renderForm(){
   FMCFG.render(document.getElementById("form"), { surface:"prefs" });
   FMCFG.wire(CTX);
   FMCFG.writeForm(state.cfg, CTX);
+  FMCFG.searchApply();      // the fresh DOM has to re-honour an active search
 }
 function collectForm(){ FMCFG.readForm(state.cfg, CTX); }
 

@@ -137,6 +137,11 @@
     </button>
   </header>
 
+  <!-- Busca de propriedades — a barra inteira é montada pelo FMCFG
+       (compartilhada com Preferências); aqui só fica o ponto de montagem, fora
+       dos hosts de render (render() limpa o innerHTML do host). -->
+  <div id="searchHost"></div>
+
   <!-- ============================ EDITOR ============================ -->
   <div class="scroll" id="editorScroll">
 
@@ -152,25 +157,25 @@
     </div>
 
     <!-- DIMENSIONS -->
-    <div class="card">
+    <div class="card" id="cardMedidas">
       <div class="head"><span class="ic">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M9 4v16"/></svg>
       </span>Medidas do armário</div>
       <div class="body">
-        <div class="diagram">
+        <div class="diagram" id="dimsDiagram">
           <svg viewBox="-24 0 286 210" id="dimDiagram"></svg>
         </div>
         <!-- Rows rendered from the shared spec (cabinet_config.js) — never
              hand-write configuration rows here. -->
         <div id="dimsFields"></div>
-        <p class="hint">A altura inclui o rodapé. A espessura é a grossura da chapa (ex.: 18 mm).</p>
+        <p class="hint" id="dimsHint">A altura inclui o rodapé. A espessura é a grossura da chapa (ex.: 18 mm).</p>
       </div>
     </div>
 
     <!-- INTERIOR -->
-    <div class="card">
+    <div class="card" id="cardInterior">
       <div class="head"><span class="ic">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -839,6 +844,35 @@ function renderCfgForm(){
                { surface:"cabinet", sections:["dims"], plain:true, noDiagram:true });
   FMCFG.render(byId("cfgSections"), { surface:"cabinet", sections:CFG_SECTIONS });
   FMCFG.wire(CTX);          // one listener set; CTX covers every section
+  FMCFG.searchApply();      // the fresh DOM has to re-honour an active search
+}
+
+/* Busca de propriedades. The bar and every bit of filtering live in the shared
+   module; this only says which surface/sections it filters and hides the page's
+   OWN chrome (the interior canvas, the Medidas card) while a query is active. */
+function mountSearch(){
+  FMCFG.searchMount({
+    host: byId("searchHost"),
+    surface: "cabinet",
+    sections: ["dims"].concat(CFG_SECTIONS),
+    // "dims" is rendered plain into the Medidas card, so it has no .section
+    // wrapper -- name the host so its shared content gets scaffolded too
+    plainHosts: { dims: "dimsFields" },
+    onFilter: function(r){
+      // the card itself is what has to go when nothing inside it matches
+      var whole = !!r.secHit["dims"];
+      var any = whole || (r.sections["dims"] || 0) > 0;
+      byId("cardMedidas").classList.toggle("fmh-hide", r.filtering && !any);
+      // the card draws its own explainer + closing hint: keep them only when the
+      // whole section matched, matching how a real section behaves
+      byId("dimsDiagram").classList.toggle("fmh-hide", r.filtering && !whole);
+      byId("dimsHint").classList.toggle("fmh-hide", r.filtering && !whole);
+      // not properties: pure noise in a result list
+      byId("cardInterior").classList.toggle("fmh-hide", r.filtering);
+      byId("advRow").classList.toggle("fmh-hide", r.filtering);
+      byId("advHint").classList.toggle("fmh-hide", r.filtering);
+    }
+  });
 }
 
 function bindForm(){
@@ -885,11 +919,11 @@ function bindForm(){
   // Advanced gate: keep the screen clean by hiding the detail sections (their
   // defaults come from Preferences) until "Configuração avançada" is ticked.
   // Hiding is cosmetic only — the shared readForm reads every field regardless.
+  // The shared module is the single owner of section visibility, so it composes
+  // this gate with the search filter (a match can surface a gated section)
+  // instead of the two of them fighting over inline styles.
   function applyAdvanced(){
-    var on = byId("advancedMode").checked;
-    FMCFG.sectionDomIds(CFG_SECTIONS).forEach(function(id){
-      var el = byId(id); if (el) el.style.display = on ? "" : "none";
-    });
+    FMCFG.setGatedSections(byId("advancedMode").checked ? [] : CFG_SECTIONS);
   }
   byId("advancedMode").addEventListener("change", applyAdvanced);
   applyAdvanced();
@@ -1043,7 +1077,7 @@ function injectHelp(){
 
 FMCFG.initTooltips();
 document.addEventListener("DOMContentLoaded", function(){
-  renderCfgForm(); bindForm(); injectHelp(); init(0);
+  mountSearch(); renderCfgForm(); bindForm(); injectHelp(); init(0);
 });
 </script>
 </body>
