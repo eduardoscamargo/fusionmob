@@ -25,7 +25,7 @@ import math
 
 # Add-in version (keep in sync with FusionMob.manifest). Bump the patch digit
 # (last number) on every modification — see CLAUDE.md "Versioning".
-__version__ = '1.20.0'
+__version__ = '1.20.3'
 
 app = None
 ui = None
@@ -4631,7 +4631,7 @@ def _palette_state(design):
         'materials': [name for name, _thk in get_materials()],
         'slides': slide_specs_for_ui(),
         # Same option list the Preferences palette gets: both render their
-        # configuration form from resources/ui/cabinet_config.js.
+        # configuration form from resources/ui/shared/cabinet_config.js.
         'fita_choices': [{'value': v, 'label': lbl} for v, lbl in FITA_CHOICES],
     }
 

@@ -6,7 +6,7 @@
 <title>FusionMob - Preferências</title>
 <!-- Shared palette styling (theme, form rows, diagrams, tooltips). Anything the
      configuration form renders is styled there, so both palettes stay in step. -->
-<link rel="stylesheet" href="cabinet_config.css">
+<link rel="stylesheet" href="shared/cabinet_config.css">
 <style>
   /* Page-specific chrome only: the profile bar, the materials table and the
      sticky footer. Everything the configuration form uses lives in
@@ -150,23 +150,11 @@
   </div>
 </div>
 
+<!-- The send() contract with the add-in, shared with the Cabinet Layout palette. -->
+<script src="shared/palette_bridge.js"></script>
 <!-- The single source of truth for every cabinet configuration field. -->
-<script src="cabinet_config.js"></script>
+<script src="shared/cabinet_config.js"></script>
 <script>
-/* ---- bridge to the add-in (same contract as layout_editor.html) ------------ */
-function send(action, obj){
-  try {
-    if (typeof adsk !== "undefined" && adsk.fusionSendData){
-      var ret = adsk.fusionSendData(action, JSON.stringify(obj||{}));
-      return Promise.resolve(ret).then(function(s){
-        if (s === undefined || s === null || s === "") return null;
-        try { return JSON.parse(s); } catch(e){ return {__raw:String(s)}; }
-      }, function(e){ return {__err:String(e)}; });
-    }
-  } catch(e){ return Promise.resolve({__err:String(e)}); }
-  return Promise.resolve(null);   // bridge not ready / running in a plain browser
-}
-
 FMCFG.initTooltips();
 
 /* Busca de propriedades. All of it lives in the shared module; this only names

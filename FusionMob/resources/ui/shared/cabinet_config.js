@@ -14,7 +14,7 @@
    a configuration row directly to either HTML file — see resources/ui/CLAUDE.md.
 
    No dependencies, no build step: the palettes load this with a plain
-   <script src="cabinet_config.js"> (same folder, so the relative file:// URL
+   <script src="shared/cabinet_config.js"> (a relative path, so the file:// URL
    Fusion hands the palette resolves).
 ============================================================================= */
 "use strict";

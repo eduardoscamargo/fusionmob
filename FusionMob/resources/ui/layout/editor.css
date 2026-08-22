@@ -1,0 +1,104 @@
+/* =============================================================================
+   FusionMob — Cabinet Layout: PAGE CHROME
+   -----------------------------------------------------------------------------
+   Only what this page draws itself: the dimension explainer, the region canvas,
+   the type tiles, the stepper, the action bar and the wizard overlay.
+
+   Everything the configuration form renders (theme tokens, rows, switches,
+   sections, section diagrams, tooltips, the search bar) is styled by
+   shared/cabinet_config.css, which MUST load before this file — a few rules here are
+   descendant overrides of its classes (.actionbar .btns, .wiz-foot .grow).
+============================================================================= */
+
+  /* ---- dimension diagram (live oblique explainer) ---- */
+  .diagram { background:#262626; border:1px solid var(--line); border-radius:var(--radius);
+             padding:8px; margin-bottom:10px; }
+  .diagram svg { width:100%; height:auto; display:block; }
+  .diagram .dim line { stroke:var(--muted); stroke-width:1; }
+  .diagram .dim text { fill:var(--muted); font-size:11px; font-weight:600; }
+  .diagram .dim.active line { stroke:var(--accent-2); stroke-width:2; }
+  .diagram .dim.active text { fill:var(--accent-2); }
+  .cab-face { fill:#3d3d3d; stroke:#666; stroke-width:1.2; }
+  .cab-top  { fill:#4a4a4a; stroke:#666; stroke-width:1.2; }
+  .cab-side { fill:#333; stroke:#666; stroke-width:1.2; }
+
+  /* ---- region canvas ---- */
+  #canvasWrap { background:#262626; border:1px solid var(--line); border-radius:var(--radius);
+                padding:10px; display:flex; justify-content:center; }
+  #canvas { max-width:100%; height:auto; max-height:360px; }
+  .leaf { cursor:pointer; }
+  .leaf-label { font-weight:600; pointer-events:none; }
+
+  /* ---- type picker tiles ---- */
+  .tiles { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin:6px 0 4px; }
+  .tile { border:1px solid var(--line-2); border-radius:6px; background:#2c2c2c; cursor:pointer;
+          padding:8px 4px 6px; text-align:center; color:var(--muted); transition:.12s; }
+  .tile:hover { border-color:#777; color:var(--ink); }
+  .tile.on { border-color:var(--accent); background:rgba(6,150,215,.15); color:var(--ink); }
+  .tile svg { width:26px; height:26px; display:block; margin:0 auto 3px; }
+  .tile .t { font-size:10px; }
+  .tile:disabled { opacity:.4; cursor:default; }
+
+  /* stepper */
+  .stepper { display:inline-flex; align-items:center; border:1px solid var(--line-2);
+             border-radius:5px; overflow:hidden; background:#2c2c2c; }
+  .stepper button { width:28px; height:28px; border:0; background:#3a3a3a; color:var(--ink);
+                    font-size:15px; cursor:pointer; }
+  .stepper button:hover { background:var(--accent); }
+  .stepper input { width:44px; text-align:center; border:0; border-left:1px solid var(--line-2);
+                   border-right:1px solid var(--line-2); border-radius:0; background:transparent; }
+
+  /* selection pill / meta */
+  .pill { display:inline-block; padding:2px 9px; border-radius:11px; font-size:11px;
+          background:#4a4a4a; color:var(--ink); }
+  .swatch { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px;
+            vertical-align:middle; }
+
+  /* ---- action bar (sticky footer) ---- */
+  .actionbar { flex:0 0 auto; border-top:1px solid var(--line); background:#333;
+               padding:8px 12px; }
+  #status { min-height:16px; font-size:11px; margin-bottom:7px; display:flex; align-items:center; gap:6px; }
+  #status .dot { width:7px; height:7px; border-radius:50%; background:var(--muted); flex:0 0 auto; }
+  #status.ok .dot { background:var(--ok); } #status.ok { color:var(--ok); }
+  #status.err .dot { background:var(--err); } #status.err { color:var(--err); }
+  #status.warn .dot { background:var(--warn); } #status.warn { color:var(--warn); }
+  .actionbar .btns { align-items:center; }
+  .actionbar .grow { flex:1 1 auto; }
+
+  .banner { background:rgba(230,162,60,.14); border:1px solid rgba(230,162,60,.4);
+            color:#e6c07a; border-radius:5px; padding:7px 10px; font-size:11px; margin-bottom:10px;
+            display:none; }
+  .banner.show { display:block; }
+
+  /* ---- wizard overlay ---- */
+  .wizard { position:absolute; inset:0; background:var(--bg); display:none; flex-direction:column;
+            z-index:20; }
+  .wizard.show { display:flex; }
+  .wiz-head { padding:14px 16px 10px; border-bottom:1px solid var(--line); background:#333; }
+  .wiz-head .k { font-size:10px; color:var(--accent-2); letter-spacing:.1em; text-transform:uppercase; }
+  .wiz-head h2 { font-size:17px; margin:3px 0 8px; }
+  .steps { display:flex; gap:6px; }
+  .steps .s { flex:1; height:4px; border-radius:3px; background:#4a4a4a; }
+  .steps .s.done { background:var(--accent); }
+  .steps .s.cur { background:var(--accent-2); }
+  .wiz-body { flex:1 1 auto; overflow-y:auto; padding:16px; }
+  .wiz-foot { flex:0 0 auto; border-top:1px solid var(--line); padding:10px 16px;
+              display:flex; gap:8px; background:#333; }
+  .wiz-foot .grow { flex:1 1 auto; }
+  .steplead { color:var(--muted); font-size:12px; margin:0 0 14px; }
+
+  .choices { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .choice { border:1px solid var(--line-2); border-radius:8px; background:var(--bg-2); cursor:pointer;
+            padding:12px; text-align:left; color:var(--ink); transition:.12s; display:flex;
+            flex-direction:column; gap:8px; }
+  .choice:hover { border-color:#777; }
+  .choice.on { border-color:var(--accent); box-shadow:0 0 0 2px rgba(6,150,215,.3); }
+  .choice svg { width:100%; height:70px; }
+  .choice .cn { font-size:12px; font-weight:600; }
+  .choice .cd { font-size:11px; color:var(--muted); }
+
+  .review { background:var(--bg-2); border:1px solid var(--line); border-radius:8px; padding:14px; }
+  .review .rrow { display:flex; padding:6px 0; border-bottom:1px solid var(--line); font-size:12px; }
+  .review .rrow:last-child { border-bottom:0; }
+  .review .rrow .rk { flex:0 0 120px; color:var(--muted); }
+  .review .rrow .rv { color:var(--ink); font-weight:500; }

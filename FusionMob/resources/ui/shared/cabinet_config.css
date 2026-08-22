@@ -1,7 +1,7 @@
 /* =============================================================================
    FusionMob — SHARED palette styling (Fusion 360-inspired dark theme)
    -----------------------------------------------------------------------------
-   Everything the shared configuration form (cabinet_config.js) renders is styled
+   Everything the shared configuration form (shared/cabinet_config.js) renders is styled
    here, so a tweak to a row, a switch, a section, a reference diagram or a help
    tooltip lands on BOTH palettes at once:
 
